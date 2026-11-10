@@ -1,0 +1,103 @@
+/* Revenant Reader — dark theme, graveyard-green accents.
+   All colors are CSS variables so the polish phase can tune them in one place. */
+
+:root {
+  --bg: #0b0f0c;          /* near-black, faint green */
+  --surface: #121712;     /* card / panel */
+  --surface-2: #1a221a;   /* hover / raised */
+  --border: #263026;      /* hairlines */
+  --accent: #7ee787;      /* graveyard green */
+  --accent-dim: #4c9a5b;  /* dimmed accent */
+  --text: #e8f0e8;        /* off-white */
+  --muted: #8fa48f;       /* gray-green secondary text */
+  --danger: #e07856;      /* errors / remove */
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+}
+
+a { color: var(--accent); }
+
+button {
+  font: inherit;
+  cursor: pointer;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.8rem;
+}
+
+button:hover { border-color: var(--accent-dim); }
+
+input {
+  font: inherit;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.7rem;
+}
+
+input:focus, button:focus { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
+
+/* Layout: sidebar + main column, stacks on small screens */
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  padding: 1rem;
+  background: var(--surface);
+}
+
+.main { padding: 1.25rem 1.5rem; }
+
+@media (max-width: 720px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+/* Subtle fade-in for new summaries (no flashing, no shaking) */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise-in { animation: rise-in 0.35s ease-out; }
+
+.brand { font-size: 1.35rem; margin: 0 0 0.25rem; }
+.brand .glyph { color: var(--accent); }
+.tagline { color: var(--muted); font-size: 0.9rem; margin: 0 0 1rem; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.card h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+.card .meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+.card .why { color: var(--accent); font-size: 0.92rem; margin-top: 0.5rem; }
+.card .unread-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 0.4rem;
+}
+
+.muted { color: var(--muted); }

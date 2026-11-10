@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Environment (never commit real keys)
+.env
+.env*.local
+
+# Logs / OS
+*.log
+.DS_Store
+
+# IMPORTANT — Kiroween rule: /.kiro/ MUST be committed at the project root.
+# It is deliberately NOT listed here. Do not add it.

@@ -1,0 +1,18 @@
+{
+  "name": "revenant-reader",
+  "version": "1.0.0",
+  "description": "RSS, reborn as an AI newsroom — Kiroween 2026, Resurrection category",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}
