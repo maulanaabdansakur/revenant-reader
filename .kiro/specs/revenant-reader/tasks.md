@@ -252,7 +252,40 @@ only when its acceptance criteria pass.
     directly per user instruction ("Push saja, tidak usah tanya lagi").
 
 ### Dedupe
-- [ ] 23. Link normalization + canonical-URL dedupe (Req 4)
+- [x] 23. Link normalization + canonical-URL dedupe (Req 4)
+  - _Done when:_ the same story in 2 feeds shows as 1 card.
+  - _Done 2026-11-11:_ `normalizeLink` extended (task 17 gap fixed):
+    `at_*` prefix (BBC `at_medium`/`at_campaign`), `utm_*`, `mc_`,
+    `pk_`/`piwik_`/`matomo_`/`sc_` prefixes + fbclid/gclid/msclkid/
+    twclid/igshid/`_ga`/`si`/HubSpot etc. — article-identity params
+    (`?page=`, `?id=`, `?v=`) are KEPT, so different articles stay
+    distinct (Req 4 AC3). `storeItems` (new, exported — task 27 refresh
+    reuses it) dedupes by canonical URL at insert: a story arriving
+    from a second feed inserts NO second row, the extra feed is
+    recorded in the new `item_sources` table, and the survivor is left
+    untouched — summary, read/star, publishedAt all kept (Req 4 AC4),
+    so no second summary is ever generated. `listItemsWithSource`
+    attaches `sources[]` per item and the `?feed=` filter matches a
+    story under any feed that carried it (still one row); same-feed
+    re-fetch still refreshes title/content via the (feedId, guid)
+    upsert. `collapseDuplicateItems()` merges pre-task-23 duplicate
+    rows (summary + read/star inherited); live dev DB had 0 dup
+    groups. Tests: new `test/dedupe.test.js` (11 cases: normalization,
+    cross-feed collapse, same-feed re-issue, re-fetch refresh, AC3,
+    AC4, legacy collapse); `npm test` 30/30 pass, `npm run build`
+    passes. Verified live on the dev server with a fresh test DB and
+    real Verge Atom items served locally (3 stories): feed A added
+    (3 items, 3 summaries, 3 model calls); feed B — same 3 stories,
+    different guids, `?at_medium=RSS&at_campaign=feed-b&utm_source=`
+    links — added 201 but total stayed 3 items, same IDs, summaries
+    unchanged, still 3 model calls, each card's `sources` =
+    ["The Verge", "The Verge (Mirror B)"]; `?feed=` (B) returns all
+    3; restart kept 3 items + sources + summaries. Regression:
+    duplicate 409, example.com 422, garbage 400, PATCH star 200,
+    starred filter 1, OPML 0 added / 2 skipped, home 200. UI note:
+    the API returns `sources[]` but no chips render yet — multi-source
+    chips are task 24. Pushed to origin master directly per user
+    instruction ("Push saja, tidak usah tanya lagi").
 - [ ] 24. Normalized-title dedupe across feeds (72h window) + multi-source
       chips on the surviving card (Req 4)
   - _Done when:_ the same story in 2 feeds shows as 1 card with 2 sources.

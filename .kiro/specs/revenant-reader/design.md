@@ -130,6 +130,24 @@ the task 29 deploy decision, not this task.
    duplicate (same story syndicated).
 4. Otherwise the item is new → run the on-feed-item hook (summarize + rank).
 
+**Implemented — task 23 (2026-11-11), link dedupe only; title dedupe is
+task 24.** Step 1 now strips more than `utm_*`: `normalizeLink`
+(`src/lib/feed.js`) also strips the `at_*` prefix (BBC `at_medium` /
+`at_campaign`), `mc_` / `pk_` / `piwik_` / `matomo_` / `sc_` prefixes,
+and fbclid / gclid / msclkid / twclid / igshid / `_ga` / `si` /
+HubSpot params — while keeping article-identity params (`?page=`,
+`?id=`, `?v=`), so different articles never collapse (Req 4 AC3).
+Step 2 runs at INSERT time in `storeItems` (`src/lib/feeds-store.js`):
+a duplicate canonical URL inserts no second row; the extra feed is
+recorded in the `item_sources` table (itemId, feedId) and the surviving
+row is left untouched — its summary is kept and no second summary is
+generated (Req 4 AC4). `GET /api/items` returns `sources[]` per item
+and the `?feed=` filter matches a story under any feed that carried
+it. `collapseDuplicateItems()` merges rows that duplicated before
+task 23 (summary + read/star inherited). The `duplicateOf` column on
+items is unused by this step — the survivor/dup relationship lives in
+`item_sources` instead.
+
 ## Ranking (digest top-10)
 
 Score = recency weight (decays over 24h) + source-diversity bonus.

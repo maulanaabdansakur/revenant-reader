@@ -21,8 +21,10 @@
 // retried once, sequentially, after a 15s pause. Anything still
 // failing stays pending for the next refresh (max 3 attempts per item).
 //
-// Dedupe (hook steps 1-2) is tasks 23-24 and is intentionally not done
-// here: until then every new item is summarized once.
+// Dedupe (hook steps 1-2) is task 23 and happens at INSERT time in
+// storeItems (src/lib/feeds-store.js): a duplicate canonical URL never
+// becomes a row, so it never reaches this batch and never triggers a
+// summary call (Req 4 AC4). Title dedupe is task 24.
 
 import {
   findItemById,

@@ -12,9 +12,9 @@ parse, before it is shown in the reader).
 - Parse `publishedAt`; fall back to fetch time if the feed omits it.
 
 ### 2. Dedupe (see design.md)
-- If an item with the same `canonicalUrl` exists → mark this item
-  `duplicateOf` the surviving card and attach the new feed as an additional
-  source. **Stop here — do not summarize.**
+- If an item with the same `canonicalUrl` exists → no second row is
+  inserted; the new feed is recorded as an additional source
+  (`item_sources` table, task 23). **Stop here — do not summarize.**
 - Else if an item from a different feed in the last 72h has the same
   normalized title → same handling. **Stop here.**
 - Otherwise the item is new → continue.

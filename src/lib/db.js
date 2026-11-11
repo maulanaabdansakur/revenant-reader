@@ -59,6 +59,16 @@ export function getDb() {
     CREATE INDEX IF NOT EXISTS items_feedId_idx ON items(feedId);
     CREATE INDEX IF NOT EXISTS items_canonicalUrl_idx ON items(canonicalUrl);
     CREATE INDEX IF NOT EXISTS items_publishedAt_idx ON items(publishedAt);
+    -- Task 23: additional sources for a deduplicated story. One item row
+    -- survives per canonical URL; every other feed that carried the same
+    -- story is recorded here (task 24 renders the multi-source chips).
+    -- Deleting a feed or an item drops its source links with it.
+    CREATE TABLE IF NOT EXISTS item_sources (
+      itemId TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+      feedId TEXT NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+      PRIMARY KEY (itemId, feedId)
+    );
+    CREATE INDEX IF NOT EXISTS item_sources_feedId_idx ON item_sources(feedId);
   `);
   // Task 20: track how many summary attempts an item has had so the
   // on-feed-item hook can retry on refresh (max 3 attempts, then leave

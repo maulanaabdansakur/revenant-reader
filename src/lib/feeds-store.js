@@ -13,6 +13,9 @@
 //     read, starred, summary, whyItMatters, summaryPending, duplicateOf }
 // Items are upserted by (feedId, guid): re-fetching a feed updates the
 // stored title/content but never resets read/star state or the summary.
+// Task 23: items are ALSO deduped by canonicalUrl across feeds at insert
+// time (storeItems) — a story arriving from a second feed collapses onto
+// the surviving row and the extra feed is recorded in item_sources.
 // Deleting a feed cascades to its items (FK ON DELETE CASCADE).
 //
 // Persistence: feeds + items live in data/revenant-reader.db (gitignored)
@@ -78,31 +81,7 @@ export function addFeed(feed, items = []) {
   const insertFeed = db.prepare(
     "INSERT INTO feeds (id, url, title, siteUrl, addedAt, lastFetchedAt, lastError) VALUES (?, ?, ?, ?, ?, ?, ?)",
   );
-  const upsertItem = db.prepare(`
-    INSERT INTO items
-      (id, feedId, guid, canonicalUrl, title, content, publishedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(feedId, guid) DO UPDATE SET
-      canonicalUrl = excluded.canonicalUrl,
-      title = excluded.title,
-      content = excluded.content,
-      publishedAt = excluded.publishedAt
-  `);
-  const storeItems = (parsedItems) => {
-    for (const item of parsedItems) {
-      const guid = item.guid || item.link || item.title || "";
-      if (!guid) continue;
-      upsertItem.run(
-        randomUUID(),
-        feed.id,
-        guid,
-        normalizeLink(item.link || "") || "",
-        item.title || "",
-        item.contentSnippet || "",
-        item.publishedAt || null,
-      );
-    }
-  };
+  // Items are stored by the exported storeItems() below (task 23 dedupe).
   // node:sqlite has no .transaction() helper (better-sqlite3 does) — use
   // explicit BEGIN/COMMIT so feed + items land atomically.
   db.exec("BEGIN");
@@ -116,13 +95,177 @@ export function addFeed(feed, items = []) {
       feed.lastFetchedAt ?? null,
       feed.lastError ?? null,
     );
-    storeItems(items);
+    storeItems(feed.id, items);
     db.exec("COMMIT");
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;
   }
   return feed;
+}
+
+// --- Dedupe (task 23, Req 4) ------------------------------------------------
+//
+// storeItems inserts parsed items for one feed, collapsing duplicates by
+// canonical URL at insert time (design doc, Dedupe algorithm step 2):
+//   * Same canonical URL already stored from ANOTHER feed → duplicate:
+//     no second row is inserted (one card per story), the new feed is
+//     recorded in item_sources as an additional source (task 24 renders
+//     the chips), and the surviving row is left completely untouched —
+//     its summary, read/star state and publishedAt stay as-is (Req 4
+//     AC4: no second summary is ever generated for a duplicate).
+//   * Same canonical URL, same feed, different guid (the feed re-issued
+//     the item under a new id) → same collapse, no new row.
+//   * Same (feedId, guid) re-fetch → the existing upsert updates
+//     title/content/publishedAt but never resets read/star/summary.
+//   * Empty canonical URL (item has no link) → no URL dedupe is possible;
+//     the (feedId, guid) upsert is the only guard.
+//   * Same title, different URL → NOT a duplicate (Req 4 AC3); title
+//     dedupe is task 24.
+// Returns { inserted, duplicates } so callers (and tests) can see what
+// collapsed. The task 27 refresh will call this directly per feed.
+export function storeItems(feedId, items = []) {
+  const db = getDb();
+  const upsertItem = db.prepare(`
+    INSERT INTO items
+      (id, feedId, guid, canonicalUrl, title, content, publishedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(feedId, guid) DO UPDATE SET
+      canonicalUrl = excluded.canonicalUrl,
+      title = excluded.title,
+      content = excluded.content,
+      publishedAt = excluded.publishedAt
+  `);
+  const findByCanonicalUrl = db.prepare(
+    "SELECT * FROM items WHERE canonicalUrl = ? AND canonicalUrl != '' LIMIT 1",
+  );
+  const attachSource = db.prepare(
+    "INSERT OR IGNORE INTO item_sources (itemId, feedId) VALUES (?, ?)",
+  );
+  let inserted = 0;
+  let duplicates = 0;
+  for (const item of items) {
+    const guid = item.guid || item.link || item.title || "";
+    if (!guid) continue;
+    const canonicalUrl = normalizeLink(item.link || "") || "";
+    if (canonicalUrl) {
+      const existing = findByCanonicalUrl.get(canonicalUrl);
+      if (existing) {
+        if (existing.feedId === feedId && existing.guid === guid) {
+          // Same item re-fetched: fall through to the upsert below,
+          // which refreshes title/content/publishedAt without
+          // touching read/star/summary state.
+        } else {
+          if (existing.feedId !== feedId) {
+            attachSource.run(existing.id, feedId);
+          }
+          // Either way the story already has its one card: do not
+          // insert a second row, do not touch the survivor (AC4).
+          duplicates += 1;
+          continue;
+        }
+      }
+    }
+    upsertItem.run(
+      randomUUID(),
+      feedId,
+      guid,
+      canonicalUrl,
+      item.title || "",
+      item.contentSnippet || "",
+      item.publishedAt || null,
+    );
+    inserted += 1;
+  }
+  return { inserted, duplicates };
+}
+
+// Feeds that carried one story: the item's own feed first, then any
+// additional feeds recorded by the task 23 dedupe. Task 24 renders
+// these as multi-source chips on the surviving card.
+export function listItemSources(itemId) {
+  const db = getDb();
+  const item = db
+    .prepare("SELECT feedId FROM items WHERE id = ?")
+    .get(itemId);
+  if (!item) return [];
+  const rows = db
+    .prepare(
+      `SELECT feeds.id AS feedId, feeds.title AS title, feeds.siteUrl AS siteUrl
+       FROM item_sources
+       JOIN feeds ON feeds.id = item_sources.feedId
+       WHERE item_sources.itemId = ?
+       ORDER BY feeds.title ASC`,
+    )
+    .all(itemId);
+  const own = db
+    .prepare("SELECT id AS feedId, title, siteUrl FROM feeds WHERE id = ?")
+    .get(item.feedId);
+  const sources = own
+    ? [{ feedId: own.feedId, title: own.title, siteUrl: own.siteUrl }]
+    : [];
+  for (const row of rows) {
+    if (!sources.some((s) => s.feedId === row.feedId)) sources.push(row);
+  }
+  return sources;
+}
+
+// One-time cleanup for rows that duplicated BEFORE task 23 (e.g. a DB
+// built by tasks 16–22, where the same story could land once per feed).
+// Groups items by non-empty canonicalUrl, keeps the earliest-inserted
+// row per group as the survivor, records the other feeds as additional
+// sources, merges read/starred (OR) and the summary (the survivor keeps
+// its own; if it has none, it inherits the first duplicate's), then
+// deletes the extra rows. Returns { groups, removed }.
+export function collapseDuplicateItems() {
+  const db = getDb();
+  const groups = db
+    .prepare(
+      `SELECT canonicalUrl, COUNT(*) AS n FROM items
+       WHERE canonicalUrl != ''
+       GROUP BY canonicalUrl HAVING n > 1`,
+    )
+    .all();
+  let removed = 0;
+  const attachSource = db.prepare(
+    "INSERT OR IGNORE INTO item_sources (itemId, feedId) VALUES (?, ?)",
+  );
+  for (const { canonicalUrl } of groups) {
+    const rows = db
+      .prepare(
+        "SELECT * FROM items WHERE canonicalUrl = ? ORDER BY rowid ASC",
+      )
+      .all(canonicalUrl);
+    const survivor = rows[0];
+    const extras = rows.slice(1);
+    db.exec("BEGIN");
+    try {
+      for (const extra of extras) {
+        attachSource.run(survivor.id, extra.feedId);
+        // Merge state onto the survivor before deleting the extra row.
+        if (extra.read === 1 || extra.starred === 1) {
+          db.prepare(
+            `UPDATE items SET read = MAX(read, ?), starred = MAX(starred, ?)
+             WHERE id = ?`,
+          ).run(extra.read, extra.starred, survivor.id);
+        }
+        if (!survivor.summary && extra.summary) {
+          db.prepare(
+            `UPDATE items SET summary = ?, whyItMatters = ?, summaryPending = 0
+             WHERE id = ?`,
+          ).run(extra.summary, extra.whyItMatters, survivor.id);
+          survivor.summary = extra.summary;
+        }
+        db.prepare("DELETE FROM items WHERE id = ?").run(extra.id);
+        removed += 1;
+      }
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+  return { groups: groups.length, removed };
 }
 
 export function removeFeed(id) {
@@ -160,8 +303,13 @@ export function listItemsWithSource(feedId = null, opts = {}) {
   const where = [];
   const values = [];
   if (feedId) {
-    where.push("items.feedId = ?");
-    values.push(feedId);
+    // A story belongs to the filter when its own feed matches OR the
+    // feed carried it as an additional source (task 23 dedupe) — the
+    // story is still one row, so the list never shows it twice.
+    where.push(
+      `(items.feedId = ? OR EXISTS (SELECT 1 FROM item_sources WHERE item_sources.itemId = items.id AND item_sources.feedId = ?))`,
+    );
+    values.push(feedId, feedId);
   }
   if (typeof opts.starred === "boolean") {
     where.push("items.starred = ?");
@@ -181,10 +329,12 @@ export function listItemsWithSource(feedId = null, opts = {}) {
   return rows.map((row) => ({
     ...rowToItem(row),
     // UI shape: `url` is the canonical link (StoryCard/ArticleView read
-    // story.url); `source` is the feed title.
+    // story.url); `source` is the feed title. `sources` lists every feed
+    // that carried the story (task 23 dedupe; task 24 renders the chips).
     url: row.canonicalUrl,
     source: row.sourceTitle || "Unknown feed",
     siteUrl: row.sourceSiteUrl || "",
+    sources: listItemSources(row.id),
   }));
 }
 
@@ -218,6 +368,7 @@ export function getItemWithSource(id) {
     url: row.canonicalUrl,
     source: row.sourceTitle || "Unknown feed",
     siteUrl: row.sourceSiteUrl || "",
+    sources: listItemSources(row.id),
   };
 }
 

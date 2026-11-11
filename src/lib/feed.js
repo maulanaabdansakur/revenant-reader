@@ -17,19 +17,62 @@ const USER_AGENT =
 
 // Query params that identify the visit, not the article — stripped when
 // canonicalising a link so the same story from two feeds dedupes.
-const TRACKING_PARAMS = new Set([
-  "utm_source",
-  "utm_medium",
-  "utm_campaign",
-  "utm_term",
-  "utm_content",
-  "utm_id",
+// Two forms: exact tracker names, and prefixes (utm_*, at_* for BBC's
+// analytics, mc_*/pk_*/piwik_*/matomo_*/sc_* campaign families). Anything
+// else — ?page=2, ?id=123, ?v=... — is article identity and is KEPT, so
+// genuinely different articles never collapse (Req 4 AC3).
+const TRACKING_PARAM_NAMES = new Set([
   "fbclid",
   "gclid",
-  "mc_cid",
-  "mc_eid",
+  "gclsrc",
+  "dclid",
+  "wbraid",
+  "gbraid",
+  "msclkid",
+  "twclid",
+  "li_fat_id",
   "igshid",
+  "yclid",
+  "ysmcid",
+  "ysmadid",
+  "vero_id",
+  "vero_conv",
+  "_ga",
+  "_gl",
+  "_gac",
+  "srsltid",
+  "si",
+  "feature",
+  "_hsenc",
+  "_hsmi",
+  "hsctatracking",
+  "__hsfp",
+  "__hssc",
+  "__hstc",
+  "__s",
+  "_openstat",
+  "rb_clickid",
+  "fb_action_ids",
+  "fb_action_types",
+  "fb_source",
+  "fb_ref",
 ]);
+
+const TRACKING_PARAM_PREFIXES = [
+  "utm_",
+  "at_", // BBC: at_medium / at_campaign / at_custom1-4
+  "mc_", // Mailchimp
+  "pk_", // Piwik/Matomo campaign params
+  "piwik_",
+  "matomo_",
+  "sc_", // Adobe Analytics campaign params
+];
+
+function isTrackingParam(name) {
+  const key = name.toLowerCase();
+  if (TRACKING_PARAM_NAMES.has(key)) return true;
+  return TRACKING_PARAM_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
 
 const parser = new Parser({
   timeout: FETCH_TIMEOUT_MS,
@@ -64,7 +107,7 @@ export function normalizeLink(url) {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
   parsed.hash = "";
   for (const key of [...parsed.searchParams.keys()]) {
-    if (TRACKING_PARAMS.has(key.toLowerCase())) parsed.searchParams.delete(key);
+    if (isTrackingParam(key)) parsed.searchParams.delete(key);
   }
   // Drop a trailing slash on non-root paths so
   // https://example.com/post/ and https://example.com/post match.
