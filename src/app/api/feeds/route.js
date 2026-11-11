@@ -1,10 +1,10 @@
-// /api/feeds — list + add feeds (Phase 2, task 14).
+// /api/feeds — list + add feeds (Phase 2, task 14; SQLite store task 16).
 // GET  -> { feeds: [...] }
 // POST -> { url } — fetches + parses the URL with the task 13 parser, so a
 //   URL that is not a parseable feed is rejected with a clean error (422);
 //   an already-subscribed URL is reported as a duplicate (409, Req 1 AC5).
-// Storage is the interim in-memory store (src/lib/feeds-store.js); task 16
-// replaces it with SQLite.
+// Storage is SQLite (src/lib/feeds-store.js, task 16): the feed and its
+// parsed items are stored atomically, and survive a server restart.
 
 import { randomUUID } from "node:crypto";
 import { fetchFeed, normalizeLink } from "@/lib/feed";
@@ -51,14 +51,17 @@ export async function POST(request) {
     );
   }
 
-  const feed = addFeed({
-    id: randomUUID(),
-    url,
-    title: parsed.title || url,
-    siteUrl: parsed.siteUrl || url,
-    addedAt: new Date().toISOString(),
-    lastFetchedAt: new Date().toISOString(),
-    lastError: null,
-  });
+  const feed = addFeed(
+    {
+      id: randomUUID(),
+      url,
+      title: parsed.title || url,
+      siteUrl: parsed.siteUrl || url,
+      addedAt: new Date().toISOString(),
+      lastFetchedAt: new Date().toISOString(),
+      lastError: null,
+    },
+    parsed.items,
+  );
   return Response.json({ feed }, { status: 201 });
 }

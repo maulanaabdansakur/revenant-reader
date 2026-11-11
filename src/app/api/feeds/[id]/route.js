@@ -1,7 +1,7 @@
-// /api/feeds/[id] — remove a feed (Phase 2, task 14).
+// /api/feeds/[id] — remove a feed (Phase 2, task 14; SQLite store task 16).
 // DELETE -> { removed: feed } or 404 when the id is unknown (Req 1 AC3).
-// Storage is the interim in-memory store (src/lib/feeds-store.js); task 16
-// replaces it with SQLite.
+// Storage is SQLite (src/lib/feeds-store.js); deleting a feed cascades to
+// its stored items.
 
 import { removeFeed } from "@/lib/feeds-store";
 

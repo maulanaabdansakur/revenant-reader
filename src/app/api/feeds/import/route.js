@@ -5,8 +5,8 @@
 // Every outline URL is validated with the task 13 parser (fetchFeed) before
 // it is stored; invalid URLs, non-feed URLs and already-subscribed URLs are
 // reported in `skipped` with a reason each, never stored (Req 1 AC1-2, AC5).
-// Storage is the interim in-memory store (src/lib/feeds-store.js); task 16
-// replaces it with SQLite.
+// Storage is SQLite (src/lib/feeds-store.js, task 16): each added feed's
+// parsed items are stored with it.
 
 import { randomUUID } from "node:crypto";
 import { fetchFeed, normalizeLink } from "@/lib/feed";
@@ -90,15 +90,18 @@ export async function POST(request) {
     }
 
     added.push(
-      addFeed({
-        id: randomUUID(),
-        url,
-        title: parsed.title || label || url,
-        siteUrl: parsed.siteUrl || url,
-        addedAt: new Date().toISOString(),
-        lastFetchedAt: new Date().toISOString(),
-        lastError: null,
-      }),
+      addFeed(
+        {
+          id: randomUUID(),
+          url,
+          title: parsed.title || label || url,
+          siteUrl: parsed.siteUrl || url,
+          addedAt: new Date().toISOString(),
+          lastFetchedAt: new Date().toISOString(),
+          lastError: null,
+        },
+        parsed.items,
+      ),
     );
   }
 

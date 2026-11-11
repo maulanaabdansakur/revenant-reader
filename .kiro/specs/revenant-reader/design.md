@@ -97,6 +97,28 @@ cached — the model is never called twice for the same story.
 | summaryPending | boolean | true when model unavailable          |
 | duplicateOf  | string   | nullable; id of the surviving card   |
 
+## Persistence (task 16, implemented 2026-11-11)
+
+Local dev uses **SQLite** via Node 24's built-in `node:sqlite`
+(`DatabaseSync`, zero new dependencies, no native build). The file lives at
+`data/revenant-reader.db` (gitignored, overridable with `REVENANT_DB_PATH`);
+schema (`feeds` + `items`, FK cascade on feed delete) is created on first
+use in `src/lib/db.js`. All data access goes through the small store
+interface in `src/lib/feeds-store.js` (`listFeeds` / `findByUrl` /
+`addFeed` / `removeFeed` + `listItems` / `countItems`) — the API routes
+and UI never touch SQL directly.
+
+**Migration path to Postgres for deploy:** swap only `src/lib/db.js` for a
+`pg` Pool (`DATABASE_URL` env) and keep every store function signature.
+The SQL maps 1:1 with three mechanical changes: `?` placeholders become
+`$1, $2, …`; `INTEGER 0/1` booleans become `BOOLEAN`; `TEXT` ISO dates
+become `TIMESTAMPTZ` (store `new Date().toISOString()` either way). The
+`ON CONFLICT (feedId, guid) DO UPDATE` upsert is valid Postgres as-is.
+Do NOT ship the SQLite file to deploy: serverless filesystems are
+ephemeral (a redeploy wipes `data/`), so the deployed target must set
+`DATABASE_URL` to a hosted Postgres (Neon/Supabase free tier) — that is
+the task 29 deploy decision, not this task.
+
 ## Dedupe algorithm
 
 1. Normalize the link: strip `utm_*` params, trailing slash, fragment.
@@ -156,7 +178,8 @@ Dark theme via CSS variables (`src/app/globals.css`):
 
 ## Decisions deferred to core build (11–20 Nov)
 
-- SQLite vs. Postgres for the deployed target (SQLite first for local dev).
+- SQLite vs. Postgres for the deployed target — **decided in task 16**:
+  SQLite locally, Postgres on deploy (see "Persistence" above).
 - Which free-tier LLM endpoint to use for summaries (decide by cost = $0
   and reliability; API key, if any, via environment variable — never committed).
 - Vercel vs. Vultr-box deploy (Vercel first choice; Vultr is the proven

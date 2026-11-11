@@ -1,37 +1,154 @@
-// src/lib/feeds-store.js — interim in-memory feed store (Phase 2, task 14).
+// src/lib/feeds-store.js — SQLite-backed feed + item store (Phase 2, task 16).
 //
-// INTERIM ONLY: feeds live in a module-level Map, so they are lost when the
-// dev server restarts. Task 16 replaces this file with SQLite persistence
-// (feeds + items survive a restart); the store interface below (listFeeds /
-// addFeed / removeFeed / findByUrl) is kept small on purpose so task 16 can
-// swap the backing store without touching the API routes or the UI.
+// Task 16 replaces the task 14 interim in-memory Map with SQLite (local dev).
+// The feed interface is unchanged — listFeeds / findByUrl / addFeed /
+// removeFeed — so the API routes and UI did not need to change, except that
+// addFeed now takes the feed's parsed items as an optional second argument
+// and stores them atomically with the feed.
 //
 // Feed shape follows .kiro/specs/revenant-reader/design.md:
 //   { id, url, title, siteUrl, addedAt, lastFetchedAt, lastError }
+// Item shape (same doc):
+//   { id, feedId, guid, canonicalUrl, title, content, publishedAt,
+//     read, starred, summary, whyItMatters, summaryPending, duplicateOf }
+// Items are upserted by (feedId, guid): re-fetching a feed updates the
+// stored title/content but never resets read/star state or the summary.
+// Deleting a feed cascades to its items (FK ON DELETE CASCADE).
+//
+// Persistence: feeds + items live in data/revenant-reader.db (gitignored)
+// and survive a server restart. For the Postgres migration path, see the
+// design doc — the functions below map 1:1 to the same SQL on `pg`.
 
-const feeds = new Map(); // id -> feed
+import { randomUUID } from "node:crypto";
+import { getDb } from "./db.js";
+import { normalizeLink } from "./feed.js";
+
+function rowToFeed(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    url: row.url,
+    title: row.title,
+    siteUrl: row.siteUrl,
+    addedAt: row.addedAt,
+    lastFetchedAt: row.lastFetchedAt,
+    lastError: row.lastError,
+  };
+}
+
+function rowToItem(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    feedId: row.feedId,
+    guid: row.guid,
+    canonicalUrl: row.canonicalUrl,
+    title: row.title,
+    content: row.content,
+    publishedAt: row.publishedAt,
+    read: row.read === 1,
+    starred: row.starred === 1,
+    summary: row.summary,
+    whyItMatters: row.whyItMatters,
+    summaryPending: row.summaryPending === 1,
+    duplicateOf: row.duplicateOf,
+  };
+}
 
 export function listFeeds() {
-  return [...feeds.values()].sort((a, b) =>
-    a.addedAt < b.addedAt ? -1 : a.addedAt > b.addedAt ? 1 : 0,
-  );
+  return getDb()
+    .prepare("SELECT * FROM feeds ORDER BY addedAt ASC, id ASC")
+    .all()
+    .map(rowToFeed);
 }
 
 export function findByUrl(normalizedUrl) {
-  for (const feed of feeds.values()) {
-    if (feed.url === normalizedUrl) return feed;
-  }
-  return null;
+  return rowToFeed(
+    getDb().prepare("SELECT * FROM feeds WHERE url = ?").get(normalizedUrl),
+  );
 }
 
-export function addFeed(feed) {
-  feeds.set(feed.id, feed);
+export function findFeedById(id) {
+  return rowToFeed(getDb().prepare("SELECT * FROM feeds WHERE id = ?").get(id));
+}
+
+export function addFeed(feed, items = []) {
+  const db = getDb();
+  const insertFeed = db.prepare(
+    "INSERT INTO feeds (id, url, title, siteUrl, addedAt, lastFetchedAt, lastError) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  );
+  const upsertItem = db.prepare(`
+    INSERT INTO items
+      (id, feedId, guid, canonicalUrl, title, content, publishedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(feedId, guid) DO UPDATE SET
+      canonicalUrl = excluded.canonicalUrl,
+      title = excluded.title,
+      content = excluded.content,
+      publishedAt = excluded.publishedAt
+  `);
+  const storeItems = (parsedItems) => {
+    for (const item of parsedItems) {
+      const guid = item.guid || item.link || item.title || "";
+      if (!guid) continue;
+      upsertItem.run(
+        randomUUID(),
+        feed.id,
+        guid,
+        normalizeLink(item.link || "") || "",
+        item.title || "",
+        item.contentSnippet || "",
+        item.publishedAt || null,
+      );
+    }
+  };
+  // node:sqlite has no .transaction() helper (better-sqlite3 does) — use
+  // explicit BEGIN/COMMIT so feed + items land atomically.
+  db.exec("BEGIN");
+  try {
+    insertFeed.run(
+      feed.id,
+      feed.url,
+      feed.title,
+      feed.siteUrl,
+      feed.addedAt,
+      feed.lastFetchedAt ?? null,
+      feed.lastError ?? null,
+    );
+    storeItems(items);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
   return feed;
 }
 
 export function removeFeed(id) {
-  const feed = feeds.get(id);
+  const feed = findFeedById(id);
   if (!feed) return null;
-  feeds.delete(id);
+  getDb().prepare("DELETE FROM feeds WHERE id = ?").run(id);
   return feed;
+}
+
+export function listItems(feedId = null) {
+  const db = getDb();
+  const rows = feedId
+    ? db
+        .prepare(
+          "SELECT * FROM items WHERE feedId = ? ORDER BY publishedAt DESC, id ASC",
+        )
+        .all(feedId)
+    : db
+        .prepare("SELECT * FROM items ORDER BY publishedAt DESC, id ASC")
+        .all();
+  return rows.map(rowToItem);
+}
+
+export function countItems(feedId = null) {
+  const db = getDb();
+  const row = feedId
+    ? db.prepare("SELECT COUNT(*) AS n FROM items WHERE feedId = ?").get(feedId)
+    : db.prepare("SELECT COUNT(*) AS n FROM items").get();
+  return row.n;
 }

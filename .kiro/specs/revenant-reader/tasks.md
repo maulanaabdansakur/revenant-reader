@@ -75,9 +75,25 @@ only when its acceptance criteria pass.
     renders 200 with the Import OPML control. `npm run build` passes.
     Pushed to origin master directly per user instruction 2026-11-11
     ("Push saja, tidak usah tanya lagi").
-- [ ] 16. Persistence: SQLite locally, migration path to Postgres for
+- [x] 16. Persistence: SQLite locally, migration path to Postgres for
       deploy (Req 1, 2)
   - _Done when:_ feeds + items survive a server restart.
+  - _Done 2026-11-11:_ `src/lib/db.js` (Node 24 built-in `node:sqlite`,
+    zero new deps; `data/revenant-reader.db`, gitignored, schema created
+    on first use) + `src/lib/feeds-store.js` rewritten on SQLite with the
+    same feed interface (listFeeds/findByUrl/addFeed/removeFeed) plus
+    item upsert/list/count; addFeed stores parsed items atomically with
+    the feed, delete cascades to items. Routes pass `parsed.items` to
+    addFeed; UI unchanged. Postgres migration path documented in
+    design.md ("Persistence": swap only db.js for a `pg` Pool,
+    `$1`-style placeholders, BOOLEAN/TIMESTAMPTZ, same upsert SQL).
+    Verified live on the dev server: HN + BBC added (201, 30 + 31 items
+    in DB), duplicate 409, example.com 422, garbage 400, unknown-id
+    DELETE 404; fresh-DB OPML import added 4, skipped 1 (example.com);
+    server restart kept all 4 feeds + 91 items; DELETE of HN removed
+    its 30 items (91 → 61). `npm run build` passes. Pushed to origin
+    master directly per user instruction ("Push saja, tidak usah tanya
+    lagi").
 
 ### Reader
 - [ ] 17. Story list UI: newest-first cards with title, source, time,

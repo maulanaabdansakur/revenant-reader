@@ -9,6 +9,10 @@ out/
 .env
 .env*.local
 
+# Local SQLite database (task 16) — schema is created on first use, and the
+# file is rebuilt from the live feeds, so it is never committed.
+data/
+
 # Logs / OS
 *.log
 .DS_Store
