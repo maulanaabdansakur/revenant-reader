@@ -28,3 +28,18 @@ export function formatRelativeTime(iso) {
     day: "numeric",
   });
 }
+
+// Absolute published time for the article view: "11 Nov 2026, 14:32".
+// Phase 2, task 18. Pure function, no I/O.
+export function formatAbsoluteTime(iso) {
+  if (!iso) return "Unknown time";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Unknown time";
+  return date.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

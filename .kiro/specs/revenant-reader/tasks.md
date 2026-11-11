@@ -112,8 +112,24 @@ only when its acceptance criteria pass.
     (91 → 71 → 91 on re-add); home page 200, no scaffold text.
     `npm run build` passes. Pushed to origin master directly per user
     instruction ("Push saja, tidak usah tanya lagi").
-- [ ] 18. Article view: title, source, time, summary, original link
+- [x] 18. Article view: title, source, time, summary, original link
       (Req 2)
+  - _Done 2026-11-11:_ `ArticleView.jsx` fully wired — title, source
+    (linked to the feed's site), relative + absolute published time
+    (new `formatAbsoluteTime` in `src/lib/time.js`), summary +
+    "why it matters" when present, otherwise the excerpt with an
+    explicit "Summary pending" note (task 21 fallback; summarizer is
+    task 20), original link guarded when a feed provides none; `page.jsx`
+    saves the list scroll position on open and restores it on back, so
+    the filter + list state survive the round trip. Star/read controls
+    stay in task 19. Verified live on the dev server with a real BBC
+    story (91 items): title, source, "8m ago · Nov 11, 2026, 06:24 AM",
+    excerpt + "Summary pending", original link, back button all render;
+    summary branch renders summary + why-it-matters with no pending
+    note; no-link/no-date edge case renders the fallback notes. Home
+    page 200, feeds intact (4), per-feed filter still works (31 BBC
+    items). `npm run build` passes. Pushed to origin master directly
+    per user instruction ("Push saja, tidak usah tanya lagi").
 - [ ] 19. Read/unread + starring, persisted; starred-only filter;
       per-feed filter (Req 2)
   - _Done when:_ reload keeps read/star state; filters work.

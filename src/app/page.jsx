@@ -2,11 +2,13 @@
 // Phase 2, task 17: real stories from /api/items (SQLite, newest first),
 // replacing the scaffold sample data. Selecting a feed filters the list;
 // adding/removing/importing a feed refreshes it via onFeedsChanged.
-// Read/star toggling is task 19; the article view is task 18.
+// Phase 2, task 18: opening a story saves the list scroll position and
+// going back restores it, so the list state (filter + position) survives
+// the round trip. Read/star toggling is task 19.
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import FeedList from "@/components/FeedList";
 import StoryCard from "@/components/StoryCard";
 import ArticleView from "@/components/ArticleView";
@@ -16,6 +18,9 @@ export default function Home() {
   const [openStory, setOpenStory] = useState(null);
   const [items, setItems] = useState(null); // null = loading
   const [error, setError] = useState("");
+  // Scroll position of the story list before an article was opened, so
+  // "Back to list" can restore it (task 18).
+  const listScrollYRef = useRef(0);
 
   const fetchItems = useCallback(async (feedId) => {
     setError("");
@@ -35,6 +40,19 @@ export default function Home() {
   useEffect(() => {
     fetchItems(activeFeed);
   }, [activeFeed, fetchItems]);
+
+  const openArticle = useCallback((story) => {
+    listScrollYRef.current = window.scrollY;
+    setOpenStory(story);
+  }, []);
+
+  // Restore the list scroll position when returning from an article view.
+  useEffect(() => {
+    if (!openStory && listScrollYRef.current > 0) {
+      window.scrollTo(0, listScrollYRef.current);
+      listScrollYRef.current = 0;
+    }
+  }, [openStory]);
 
   const heading =
     activeFeed && items?.length > 0
@@ -67,7 +85,7 @@ export default function Home() {
               </p>
             )}
             {items?.map((story) => (
-              <StoryCard key={story.id} story={story} onOpen={setOpenStory} />
+              <StoryCard key={story.id} story={story} onOpen={openArticle} />
             ))}
           </>
         )}
