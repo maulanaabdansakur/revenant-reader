@@ -96,8 +96,22 @@ only when its acceptance criteria pass.
     lagi").
 
 ### Reader
-- [ ] 17. Story list UI: newest-first cards with title, source, time,
+- [x] 17. Story list UI: newest-first cards with title, source, time,
       read/unread dot (Req 2)
+  - _Done 2026-11-11:_ `GET /api/items` (+ `?feed=` filter) via new
+    `listItemsWithSource` (joins feed title as `source`, newest-first,
+    undated last) + `src/lib/time.js` (relative time: "5m ago", "3h ago",
+    "2d ago", date for older) + `page.jsx` rewritten on real items
+    (sample data removed; refetches on feed select and on feed add/
+    remove/import) + `StoryCard`/`ArticleView` show relative time and
+    the excerpt with a "Summary pending" note until task 20. Verified
+    live on the dev server: HN + BBC added (61 items), all dated,
+    sorted newest-first, all unread with dots, correct sources/times;
+    `?feed=` returned 30 HN-only items in order; OPML regression
+    (Verge + Ars added, 2 dups + 1 bad skipped); DELETE cascade
+    (91 → 71 → 91 on re-add); home page 200, no scaffold text.
+    `npm run build` passes. Pushed to origin master directly per user
+    instruction ("Push saja, tidak usah tanya lagi").
 - [ ] 18. Article view: title, source, time, summary, original link
       (Req 2)
 - [ ] 19. Read/unread + starring, persisted; starred-only filter;

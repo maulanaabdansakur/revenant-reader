@@ -133,16 +133,44 @@ export function removeFeed(id) {
 
 export function listItems(feedId = null) {
   const db = getDb();
+  // `publishedAt IS NULL` sorts undated items last (SQLite puts NULLs
+  // first under plain DESC); newest dated item first, ties by id.
   const rows = feedId
     ? db
         .prepare(
-          "SELECT * FROM items WHERE feedId = ? ORDER BY publishedAt DESC, id ASC",
+          "SELECT * FROM items WHERE feedId = ? ORDER BY publishedAt IS NULL, publishedAt DESC, id ASC",
         )
         .all(feedId)
     : db
-        .prepare("SELECT * FROM items ORDER BY publishedAt DESC, id ASC")
+        .prepare(
+          "SELECT * FROM items ORDER BY publishedAt IS NULL, publishedAt DESC, id ASC",
+        )
         .all();
   return rows.map(rowToItem);
+}
+
+// Same as listItems, but with the feed's title attached as `source`
+// (and its site URL) so the story list can show where each story came
+// from without a second round-trip. Used by GET /api/items (task 17).
+export function listItemsWithSource(feedId = null) {
+  const db = getDb();
+  const query = `
+    SELECT items.*, feeds.title AS sourceTitle, feeds.siteUrl AS sourceSiteUrl
+    FROM items LEFT JOIN feeds ON feeds.id = items.feedId
+    ${feedId ? "WHERE items.feedId = ?" : ""}
+    ORDER BY items.publishedAt IS NULL, items.publishedAt DESC, items.id ASC
+  `;
+  const rows = feedId
+    ? db.prepare(query).all(feedId)
+    : db.prepare(query).all();
+  return rows.map((row) => ({
+    ...rowToItem(row),
+    // UI shape: `url` is the canonical link (StoryCard/ArticleView read
+    // story.url); `source` is the feed title.
+    url: row.canonicalUrl,
+    source: row.sourceTitle || "Unknown feed",
+    siteUrl: row.sourceSiteUrl || "",
+  }));
 }
 
 export function countItems(feedId = null) {

@@ -14,7 +14,7 @@ const STARTER_FEEDS = [
   { title: "The Verge", url: "https://www.theverge.com/rss/index.xml" },
 ];
 
-export default function FeedList({ activeFeed, onSelect }) {
+export default function FeedList({ activeFeed, onSelect, onFeedsChanged }) {
   const [feeds, setFeeds] = useState(null); // null = loading
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
@@ -56,6 +56,7 @@ export default function FeedList({ activeFeed, onSelect }) {
       }
       setUrl("");
       await refresh();
+      onFeedsChanged?.();
     } catch {
       setError("Could not reach the server — try again.");
     } finally {
@@ -86,6 +87,7 @@ export default function FeedList({ activeFeed, onSelect }) {
         skipped: Array.isArray(data.skipped) ? data.skipped : [],
       });
       await refresh();
+      onFeedsChanged?.();
     } catch {
       setError("Could not reach the server — try again.");
     } finally {
@@ -107,6 +109,7 @@ export default function FeedList({ activeFeed, onSelect }) {
       }
       if (activeFeed === id) onSelect(null);
       await refresh();
+      onFeedsChanged?.();
     } catch {
       setError("Could not reach the server — try again.");
     } finally {
