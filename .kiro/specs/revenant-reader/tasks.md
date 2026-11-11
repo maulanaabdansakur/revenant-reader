@@ -58,10 +58,23 @@ only when its acceptance criteria pass.
     rejected (400), list showed both, both deleted (200, unknown id
     404), list empty again; home page renders 200. `npm run build`
     passes. NOT pushed — push after user review.
-- [ ] 15. OPML import: parse file, add valid feeds, report added vs.
+- [x] 15. OPML import: parse file, add valid feeds, report added vs.
       skipped (Req 1)
   - _Done when:_ a sample OPML with 5 feeds (1 bad URL) imports 4 and
     reports the skip.
+  - _Done 2026-11-11:_ `src/lib/opml.js` (xmlUrl extraction from outline
+    elements, entity decoding, folder outlines ignored) +
+    `src/app/api/feeds/import/route.js` (POST multipart file; each URL
+    validated with the task 13 parser — invalid/non-feed/duplicate
+    reported in `skipped` with a reason each) + `FeedList.jsx` wired
+    (file input + "Imported N, skipped M" report with per-URL reasons).
+    Verified live on the dev server: sample OPML (HN, BBC, Verge, Ars
+    Technica + example.com) imported 4, skipped 1 (example.com, not a
+    feed); re-import skipped all 5 (4 duplicates + 1 not-a-feed);
+    non-OPML / no-file / feed-less OPML all rejected 400; home page
+    renders 200 with the Import OPML control. `npm run build` passes.
+    Pushed to origin master directly per user instruction 2026-11-11
+    ("Push saja, tidak usah tanya lagi").
 - [ ] 16. Persistence: SQLite locally, migration path to Postgres for
       deploy (Req 1, 2)
   - _Done when:_ feeds + items survive a server restart.

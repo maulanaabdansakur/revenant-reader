@@ -1,7 +1,8 @@
 // FeedList — sidebar: subscribed feeds, add-feed form, OPML import.
-// Phase 2, task 14: wired to /api/feeds (list/add/remove). When no feeds
-// exist yet, the three starter feeds are offered as one-click suggestions
-// (Req 6 AC4). OPML import lands in task 15.
+// Phase 2, task 14: wired to /api/feeds (list/add/remove). Task 15: OPML
+// import via /api/feeds/import (file input + added/skipped report). When no
+// feeds exist yet, the three starter feeds are offered as one-click
+// suggestions (Req 6 AC4).
 
 "use client";
 
@@ -17,7 +18,9 @@ export default function FeedList({ activeFeed, onSelect }) {
   const [feeds, setFeeds] = useState(null); // null = loading
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const [importResult, setImportResult] = useState(null); // { addedCount, skipped: [{url, reason}] }
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [removingId, setRemovingId] = useState(null);
 
   async function refresh() {
@@ -57,6 +60,36 @@ export default function FeedList({ activeFeed, onSelect }) {
       setError("Could not reach the server — try again.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function importOpml(file) {
+    if (!file) return;
+    setImporting(true);
+    setError("");
+    setImportResult(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/feeds/import", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || "Could not import that OPML file.");
+        return;
+      }
+      setImportResult({
+        addedCount: data.addedCount ?? 0,
+        skippedCount: data.skippedCount ?? 0,
+        skipped: Array.isArray(data.skipped) ? data.skipped : [],
+      });
+      await refresh();
+    } catch {
+      setError("Could not reach the server — try again.");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -116,14 +149,50 @@ export default function FeedList({ activeFeed, onSelect }) {
       )}
 
       <p style={{ marginTop: "1rem" }}>
-        <button
-          type="button"
-          onClick={() => alert("OPML import lands in Phase 2 (task 15).")}
+        <label
+          htmlFor="opml-file"
+          style={{
+            display: "inline-block",
+            cursor: importing ? "wait" : "pointer",
+            border: "1px solid var(--border, #2a332a)",
+            borderRadius: "0.4rem",
+            padding: "0.4rem 0.6rem",
+          }}
         >
-          Import OPML
-        </button>{" "}
+          {importing ? "Importing…" : "Import OPML"}
+        </label>
+        <input
+          id="opml-file"
+          type="file"
+          accept=".opml,.xml,application/xml,text/xml"
+          style={{ display: "none" }}
+          disabled={importing}
+          onChange={(e) => {
+            importOpml(e.target.files?.[0]);
+            // Reset so the same file can be picked again after a fix.
+            e.target.value = "";
+          }}
+        />{" "}
         <a href="/digest">Daily digest</a>
       </p>
+      {importResult && (
+        <p role="status" style={{ fontSize: "0.9rem" }}>
+          Imported {importResult.addedCount} feed
+          {importResult.addedCount === 1 ? "" : "s"}
+          {importResult.skippedCount > 0 &&
+            `, skipped ${importResult.skippedCount}:`}
+          {importResult.skippedCount === 0 && "."}
+        </p>
+      )}
+      {importResult?.skipped?.length > 0 && (
+        <ul style={{ fontSize: "0.85rem", color: "#ff9d9d", paddingLeft: "1rem" }}>
+          {importResult.skipped.map((s) => (
+            <li key={s.url}>
+              {s.url} — {s.reason}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <h2 style={{ fontSize: "0.95rem", color: "var(--muted)" }}>Feeds</h2>
       {loading && <p className="muted">Loading feeds…</p>}
