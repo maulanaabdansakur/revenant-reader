@@ -24,6 +24,13 @@ export default function Home() {
   const [openStory, setOpenStory] = useState(null);
   const [items, setItems] = useState(null); // null = loading
   const [error, setError] = useState("");
+  // Task 27: manual refresh state — the button POSTs /api/refresh
+  // (polls all feeds, stores new items, queues summaries in the
+  // background), then reloads the list. refreshInfo reports the
+  // outcome; summaries land after the response and appear on the next
+  // list reload (or the next refresh).
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshInfo, setRefreshInfo] = useState("");
   // Scroll position of the story list before an article was opened, so
   // "Back to list" can restore it (task 18).
   const listScrollYRef = useRef(0);
@@ -46,6 +53,38 @@ export default function Home() {
 
   useEffect(() => {
     fetchItems(activeFeed, starredOnly);
+  }, [activeFeed, starredOnly, fetchItems]);
+
+  // Task 27: manual refresh — POST /api/refresh polls every subscribed
+  // feed and stores new items (dedupe at insert); summaries are queued
+  // in the background by the route and land after the response, so the
+  // list is reloaded now (new stories show immediately, summaries
+  // appear as they are generated).
+  const refreshFeeds = useCallback(async () => {
+    setRefreshing(true);
+    setRefreshInfo("");
+    setError("");
+    try {
+      const res = await fetch("/api/refresh", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || "Refresh failed — try again.");
+        return;
+      }
+      const failed = (data.feeds || []).filter((f) => f.error);
+      setRefreshInfo(
+        `Refreshed ${data.feeds?.length ?? 0} feeds: ${data.totalInserted ?? 0} new stories` +
+          (failed.length
+            ? `, ${failed.length} feed${failed.length > 1 ? "s" : ""} failed (${failed[0].title})`
+            : "") +
+          ". Summaries are on their way.",
+      );
+      fetchItems(activeFeed, starredOnly);
+    } catch {
+      setError("Could not reach the server — try again.");
+    } finally {
+      setRefreshing(false);
+    }
   }, [activeFeed, starredOnly, fetchItems]);
 
   // Persist a read/star change and reflect it in the list (and in the
@@ -176,8 +215,14 @@ const openArticle = useCallback(
                 style={starredOnly ? { borderColor: "var(--accent)" } : undefined}
               >
                 ★ Starred only
+              </button>{" "}
+              <button type="button" onClick={refreshFeeds} disabled={refreshing}>
+                {refreshing ? "Refreshing…" : "↻ Refresh feeds"}
               </button>
             </p>
+            {refreshInfo && (
+              <p className="muted" style={{ margin: "0 0 0.75rem" }}>{refreshInfo}</p>
+            )}
             {error && (
               <p role="alert" style={{ color: "#ff9d9d" }}>{error}</p>
             )}

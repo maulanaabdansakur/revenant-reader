@@ -243,8 +243,59 @@ items in testing. A summary shorter than 2 sentences is retried once
 with a firmer prompt (max 2 calls per item). Summarization runs in the
 background after feed add / OPML import (the POST never waits); on
 serverless the background work may be cut off after the response —
-task 27 (refresh scheduler) / task 29 (deploy) must confirm `waitUntil`
-or a cron-driven refresh so summaries still land on Vercel.
+**resolved in task 27 (refresh scheduler): the summarize phase runs
+via Next.js `after()` — see "Refresh" below.**
+
+## Refresh (task 27, implemented 2026-11-11)
+
+`POST /api/refresh` (and `GET`, the Vercel Cron entry point — cron jobs
+can only issue GETs) polls every subscribed feed and runs the
+on-feed-item hook per new item. Two phases, in `src/lib/refresh.js`:
+
+- **Fetch phase** (in-request, fast): all feeds fetched concurrently
+  (10s cap each), new items stored via `storeItems` (dedupe at insert,
+  tasks 23/24), `lastFetchedAt`/`lastError` recorded per feed (new
+  `updateFeedFetchState` in the store). One dead feed never stops the
+  others. Returns `{ refreshedAt, feeds: [{ feedId, title, url,
+  fetched, inserted, duplicates, error }], totalInserted,
+  totalDuplicates, errors, summariesQueued: true }`. `inserted` counts
+  brand-new rows (measured by item count before/after — `storeItems`
+  also counts re-fetch upserts as "inserted", so its number is not
+  used for the report). A refresh already in progress returns 409.
+- **Summarize phase** (after the response, via Next.js `after()` from
+  `next/server`): runs `runSummariesForFeed` per feed, sequentially
+  (rate-limit safety — task 20), so previously unsummarized items get
+  summaries too, not only brand-new arrivals. That is the backfill for
+  the 91 pre-task-20 rows: each refresh retries them (attempts < 3)
+  until they land. `after()` keeps the work alive on serverless
+  instead of being cut off with the response — this resolves the task
+  20 caveat for the refresh path. (Feed-add / OPML-import still use
+  plain fire-and-forget; the refresh route is the reliable path.)
+- **Timer:** `src/instrumentation.js` (`register()`, plain JS — no
+  tsconfig in this project) starts a `setInterval` on long-running
+  servers (dev + `next start`): every `REFRESH_INTERVAL_MINUTES`
+  (default 30, `0` disables) it runs `refreshAndSummarize()`. No
+  refresh at boot. Guarded against the build phase (`NEXT_PHASE ===
+  "phase-production-build"`) so `next build` never starts a timer.
+- **Deploy:** on Vercel the in-process timer does NOT fire reliably
+  (serverless instances freeze between requests) — deploy uses Vercel
+  Cron hitting `GET /api/refresh` instead (Hobby allows once-daily;
+  the in-process timer covers the long-running Vultr fallback).
+  Refreshing is idempotent and touches no user data, so the cron GET
+  needs no secret. The timer and the route share one module-level
+  lock, so manual / timer / cron refreshes can never overlap (the
+  summarizer must never be called twice for the same item).
+- **Manual refresh:** "↻ Refresh feeds" buttons on the reader list
+  (home page header) and the digest sidebar — POST `/api/refresh`,
+  then reload the list/digest and report "N new stories" (summaries
+  land after the response and appear on the next reload).
+- **Observation (pre-existing, not changed):** the intra-batch retry
+  round in `runSummariesForFeed` (task 20) does not re-check the
+  3-attempt cap, so one batch can push an item from 2 to 4 attempts
+  (the cap is enforced at selection time in
+  `listUnsummaryizedItems`). With the default 30-min timer this is
+  harmless — a hopeless item exhausts after ~2 ticks and is never
+  selected again — so the behavior was left as-is.
 
 ## Theming
 

@@ -81,6 +81,17 @@ export function findFeedById(id) {
   return rowToFeed(getDb().prepare("SELECT * FROM feeds WHERE id = ?").get(id));
 }
 
+// Task 27: record a refresh attempt on a feed — lastFetchedAt is set on
+// every attempt, lastError carries the fetch failure message (or null
+// when the fetch succeeded). The UI does not show these yet; they are
+// for the refresh report and for diagnosing a dead feed.
+export function updateFeedFetchState(id, { lastFetchedAt, lastError }) {
+  getDb()
+    .prepare("UPDATE feeds SET lastFetchedAt = ?, lastError = ? WHERE id = ?")
+    .run(lastFetchedAt ?? null, lastError ?? null, id);
+  return findFeedById(id);
+}
+
 export function addFeed(feed, items = []) {
   const db = getDb();
   const insertFeed = db.prepare(

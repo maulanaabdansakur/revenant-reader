@@ -19,6 +19,10 @@ export default function DigestPage() {
   const [count, setCount] = useState(0);
   const [limit, setLimit] = useState(10);
   const [error, setError] = useState("");
+  // Task 27: manual feed refresh (same as the reader list) — POST
+  // /api/refresh polls all feeds, then the digest is reloaded so new
+  // stories can rank in.
+  const [refreshingFeeds, setRefreshingFeeds] = useState(false);
   // Scroll position of the digest before an article was opened, so
   // "Back to digest" can restore it (same pattern as task 18).
   const listScrollYRef = useRef(0);
@@ -39,6 +43,24 @@ export default function DigestPage() {
 
   useEffect(() => {
     fetchDigest();
+  }, [fetchDigest]);
+
+  const refreshFeeds = useCallback(async () => {
+    setRefreshingFeeds(true);
+    setError("");
+    try {
+      const res = await fetch("/api/refresh", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || "Refresh failed — try again.");
+        return;
+      }
+      fetchDigest();
+    } catch {
+      setError("Could not reach the server — try again.");
+    } finally {
+      setRefreshingFeeds(false);
+    }
   }, [fetchDigest]);
 
   // Persist a read/star change and reflect it in the digest (and in the
@@ -139,6 +161,9 @@ export default function DigestPage() {
         <p>
           <button type="button" onClick={fetchDigest}>
             Refresh digest
+          </button>{" "}
+          <button type="button" onClick={refreshFeeds} disabled={refreshingFeeds}>
+            {refreshingFeeds ? "Refreshing…" : "↻ Refresh feeds"}
           </button>
         </p>
       </aside>

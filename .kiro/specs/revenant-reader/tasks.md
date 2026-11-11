@@ -375,8 +375,39 @@ only when its acceptance criteria pass.
     filter 0 after restore, OPML real DB 0 added / 3 skipped, home 200,
     /digest page 200. Pushed to origin master directly per user
     instruction ("Push saja, tidak usah tanya lagi").
-- [ ] 27. Refresh scheduler: poll feeds on a timer + manual refresh button;
+- [x] 27. Refresh scheduler: poll feeds on a timer + manual refresh button;
       runs the on-feed-item hook per new item (Req 3, 4, 5)
+  - _Done when:_ a manual refresh brings in new items + summaries;
+    previously unsummarized items get summaries; the timer fires.
+  - _Done 2026-11-11:_ `POST /api/refresh` (+ `GET` for Vercel Cron)
+    with `src/lib/refresh.js` (fetch phase: concurrent fetches,
+    `storeItems` dedupe, `lastFetchedAt`/`lastError` per feed via new
+    `updateFeedFetchState`, per-feed report, 409 when a run overlaps)
+    + summarize phase via Next.js `after()` (resolves the task 20
+    serverless caveat — background summaries land after the response)
+    + timer in `src/instrumentation.js` (`register()`, plain JS;
+    `REFRESH_INTERVAL_MINUTES` default 30, 0 disables, no refresh at
+    boot, build-phase guard) + "↻ Refresh feeds" buttons on the home
+    page and the digest sidebar. Design.md documents the deploy split
+    (Vercel Cron → GET /api/refresh; in-process timer for dev/Vultr).
+    Tests: new `test/refresh.test.js` (5 cases: per-feed counts, second
+    refresh 0 new, failing feed recorded + others continue, summarize
+    batch invoked, overlapping run → alreadyRunning); `npm test` 60/60
+    pass, `npm run build` passes. Verified live on the dev server with
+    a fresh temp DB + local feed: timer fired (6s interval — "timer
+    started" + lastFetchedAt advanced) and disabled with =0; dead-endpoint
+    feed-add left 3 items unsummarized; manual refresh backfilled them
+    3/3 (one 404 recovered by the retry round), then a 4th item added
+    to the feed arrived via refresh (inserted 1) and got summarized
+    (4/4); home + digest pages render the "Refresh feeds" button. Real
+    dev DB (91 items, all unsummarized): refresh fetched all 4 live
+    feeds (HN 2 + BBC 3 new = 96 items), summaries landing in the
+    background (6/96 minutes after the refresh, HN batch first);
+    backfill continues while the server runs and retries pending items
+    on the next refresh. Regression: duplicate 409, example.com 422,
+    garbage 400, unknown DELETE 404, /api/digest 200. Pushed to origin
+    master directly per user instruction ("Push saja, tidak usah tanya
+    lagi").
 - [ ] 28. UI polish: responsive layout, card fade-in animation, empty state
       with 3 starter feeds (Req 6)
 - [ ] 29. Deploy live (Vercel first choice; Vultr box fallback) with the
