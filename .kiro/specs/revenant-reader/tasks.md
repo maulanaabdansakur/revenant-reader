@@ -28,14 +28,21 @@ only when its acceptance criteria pass.
 - [ ] 11. Request the free 4,000 Kiro credits on the Devpost Resources tab
       — **needs the user's Devpost account in a browser; deadline 2 Dec
       03:00 WIB. Do not miss.**
-- [ ] 12. Create the public GitHub repo and push (after user review)
+- [x] 12. Create the public GitHub repo and push (after user review)
+  - _Done 2026-11-10:_ repo `maulanaabdansakur/revenant-reader` live with
+    topics + MIT license; local `master` up to date with `origin/master`.
 
 ## Phase 2 — Core build (11–20 Nov)
 
 ### Feeds
-- [ ] 13. Feed parser: fetch + parse RSS 2.0 and Atom 1.0 (Req 1)
-  - _Done when:_ 3 real feeds (e.g. Hacker News, BBC, The Verge) parse
-    title/items correctly, and a bad URL returns a clean error.
+- [x] 13. Feed parser: fetch + parse RSS 2.0 and Atom 1.0 (Req 1)
+  - _Done 2026-11-11:_ `src/lib/feed.js` implements `fetchFeed` (10s
+    timeout, browser UA, `rss-parser`) plus `normalizeLink` (utm/fbclid/
+    gclid stripped, fragment + trailing slash removed) and
+    `normalizeTitle`. Verified live via dev server: Hacker News RSS 20
+    items, BBC News RSS 31 items, The Verge Atom 10 items; bad URL
+    (example.com 404) and invalid URL both return clean errors.
+    `npm run build` passes. NOT pushed yet — push after user review.
 - [ ] 14. Feed CRUD API: `POST /api/feeds`, `GET /api/feeds`,
       `DELETE /api/feeds/[id]` (Req 1)
   - _Done when:_ add/remove/list works end-to-end from the UI.
