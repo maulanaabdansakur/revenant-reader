@@ -281,7 +281,10 @@ on-feed-item hook per new item. Two phases, in `src/lib/refresh.js`:
   (serverless instances freeze between requests) — deploy uses Vercel
   Cron hitting `GET /api/refresh` instead (Hobby allows once-daily;
   the in-process timer covers the long-running Vultr fallback).
-  Refreshing is idempotent and touches no user data, so the cron GET
+  **Deployed 2026-11-11 (task 29): the live deployment is the Vultr
+  fallback** (Vercel not connected in this environment) — the timer
+  fires there, and Vercel Cron remains the mechanism if/when the
+  Vercel deploy happens. Refreshing is idempotent and touches no user data, so the cron GET
   needs no secret. The timer and the route share one module-level
   lock, so manual / timer / cron refreshes can never overlap (the
   summarizer must never be called twice for the same item).

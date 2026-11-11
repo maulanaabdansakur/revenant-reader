@@ -447,8 +447,40 @@ only when its acceptance criteria pass.
     part. Regression: feed CRUD / items / digest / refresh button all
     pass. Pushed to origin master directly per user instruction
     ("Push saja, tidak usah tanya lagi").
-- [ ] 29. Deploy live (Vercel first choice; Vultr box fallback) with the
+- [x] 29. Deploy live (Vercel first choice; Vultr box fallback) with the
       public URL recorded in the README (Req 7)
+  - _Done 2026-11-11:_ **LIVE at http://167.179.88.69:3000 — Vultr
+    fallback.** Vercel was NOT deployable from this environment: the
+    only Vercel tooling here is the remote MCP CLI and `vercel status`
+    reports `not_connected` (no OAuth) — connecting needs the user's
+    own Vercel sign-in, and Neon/Supabase free-tier Postgres signup
+    likewise needs the user's account action, so neither was done (no
+    credentials invented). The app runs on the Vultr box as a Docker
+    container (`node:24-alpine`, `npm ci` + `next build` + `next start`,
+    `--restart unless-stopped`, port 3000, `REFRESH_INTERVAL_MINUTES=30`,
+    `Dockerfile` + `.dockerignore` committed; veribrief container
+    untouched on port 80). **Persistence choice (documented):** SQLite
+    on a host-mounted volume (`/root/revenant-reader-data:/app/data`)
+    — durable on this long-running server, so Req 7 AC2 holds; the
+    design doc's Postgres requirement applies to serverless Vercel
+    (ephemeral filesystem), not to this box. **Background summaries:**
+    the in-process timer fires on this long-running server (log:
+    "[refresh] timer started: every 30 min"); Vercel Cron (GET
+    /api/refresh) is the mechanism if/when the Vercel deploy happens.
+    Verified live on the public URL: home 200, /digest 200, 3 starter
+    feeds added (201 each, HN 30 + BBC 31 + Verge 10 = 71 items), POST
+    /api/refresh 200 (0 errors, summariesQueued), 62/71 summarized
+    within minutes (9 pending: attempts=4, exhausted by the task 20/21
+    cap — they show the "Summary unavailable" fallback by design; one
+    attempts=2 item recovered via manual retry), /api/digest count 9
+    all with summaries, duplicate 409 / example.com 422 / garbage 400,
+    PATCH star 200 + starred filter + restore. **Persistence verified:**
+    `docker restart` → same 3 feeds + items intact (DB file on the
+    host volume). One transient HN fetch failure in the logs
+    (container-restart moment; later refreshes fetched fine).
+    `npm test` 69/69 pass, `npm run build` passes. Pushed to origin
+    master directly per user instruction ("Push saja, tidak usah
+    tanya lagi").
 - [ ] 30. Full manual pass: add 3 feeds → summaries appear → filter/rank →
       digest top 10 (this is the demo script)
 

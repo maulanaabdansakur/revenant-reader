@@ -19,7 +19,29 @@ as a daily AI newsroom.
 5. **Daily digest:** top 10 ranked stories from the last 24 hours.
 6. **Spooky-polished UI:** dark theme, graveyard-green accents, subtle
    animations.
-7. **Deploy live** (Vercel first choice; Vultr box fallback).
+7. **Deploy live** — **http://167.179.88.69:3000** (Vultr box; see
+   "Live demo" below. Vercel is the first-choice target but needs the
+   owner's sign-in.)
+
+## Live demo
+
+**http://167.179.88.69:3000** — live since 2026-11-11, running on the
+Vultr box as a Docker container (`next start`, port 3000). Feeds, items,
+read/star state and summaries persist in SQLite on a host-mounted volume,
+so they survive container restarts and redeploys; feeds refresh on a
+30-minute timer plus the manual "Refresh feeds" button.
+
+Deploy notes: Vercel is the first-choice target, but it is not connected
+in this environment (`vercel status` → `not_connected`) — deploying there
+needs the owner's Vercel sign-in, plus a Neon/Supabase free-tier Postgres
+(the app's SQLite store does not persist on serverless). Until then, the
+Vultr deployment above is the live demo. To redeploy after a push:
+`cd /root/revenant-reader && git pull && docker build -t
+revenant-reader . && docker stop revenant-reader && docker rm
+revenant-reader && docker run -d --name revenant-reader --restart
+unless-stopped -p 3000:3000 -v /root/revenant-reader-data:/app/data -e
+REFRESH_INTERVAL_MINUTES=30 revenant-reader` (the data volume is never
+deleted, so subscriptions survive).
 
 Out of scope: user accounts/login, paywalls, mobile apps, podcast support,
 full-text extraction beyond feeds.
