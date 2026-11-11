@@ -2,19 +2,17 @@
 // Phase 2, task 14: wired to /api/feeds (list/add/remove). Task 15: OPML
 // import via /api/feeds/import (file input + added/skipped report). When no
 // feeds exist yet, the three starter feeds are offered as one-click
-// suggestions (Req 6 AC4).
+// suggestions (Req 6 AC4) — the list lives in src/lib/starter-feeds.js,
+// shared with the main-area EmptyState (task 28). Task 28: accepts a
+// `refreshSignal` prop — bumped by the parent after a starter feed is
+// added from the main-area empty state, so the sidebar list re-fetches.
 
 "use client";
 
 import { useEffect, useState } from "react";
+import { STARTER_FEEDS } from "@/lib/starter-feeds";
 
-const STARTER_FEEDS = [
-  { title: "Hacker News", url: "https://news.ycombinator.com/rss" },
-  { title: "BBC News", url: "https://feeds.bbci.co.uk/news/rss.xml" },
-  { title: "The Verge", url: "https://www.theverge.com/rss/index.xml" },
-];
-
-export default function FeedList({ activeFeed, onSelect, onFeedsChanged }) {
+export default function FeedList({ activeFeed, onSelect, onFeedsChanged, refreshSignal }) {
   const [feeds, setFeeds] = useState(null); // null = loading
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
@@ -37,6 +35,13 @@ export default function FeedList({ activeFeed, onSelect, onFeedsChanged }) {
   useEffect(() => {
     refresh();
   }, []);
+
+  // Task 28: re-fetch when the parent signals a feed was added outside
+  // this sidebar (starter feed from the main-area empty state).
+  useEffect(() => {
+    if (refreshSignal) refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
 
   async function addFeed(feedUrl) {
     const target = (feedUrl ?? url).trim();
@@ -225,6 +230,8 @@ export default function FeedList({ activeFeed, onSelect, onFeedsChanged }) {
                 onClick={() => onSelect(feed.id)}
                 style={{
                   flex: 1,
+                  minWidth: 0,
+                  overflowWrap: "anywhere",
                   textAlign: "left",
                   borderColor: activeFeed === feed.id ? "var(--accent)" : undefined,
                 }}

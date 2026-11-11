@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import FeedList from "@/components/FeedList";
 import StoryCard from "@/components/StoryCard";
 import ArticleView from "@/components/ArticleView";
+import EmptyState from "@/components/EmptyState";
 
 export default function Home() {
   const [activeFeed, setActiveFeed] = useState(null);
@@ -31,6 +32,15 @@ export default function Home() {
   // list reload (or the next refresh).
   const [refreshing, setRefreshing] = useState(false);
   const [refreshInfo, setRefreshInfo] = useState("");
+  // Task 28: how many feeds exist (null = unknown yet). The empty state
+  // with the 3 starter feeds renders only when this is 0, so a user with
+  // feeds but no stories yet sees the "try refresh" message instead.
+  const [feedCount, setFeedCount] = useState(null);
+  // Task 28: bumped after a starter feed is added from the main-area
+  // empty state, so FeedList (sidebar) re-fetches its list too.
+  const [feedsVersion, setFeedsVersion] = useState(0);
+  // Adding a starter feed from the empty state (task 28).
+  const [addingStarter, setAddingStarter] = useState(false);
   // Scroll position of the story list before an article was opened, so
   // "Back to list" can restore it (task 18).
   const listScrollYRef = useRef(0);
@@ -54,6 +64,60 @@ export default function Home() {
   useEffect(() => {
     fetchItems(activeFeed, starredOnly);
   }, [activeFeed, starredOnly, fetchItems]);
+
+  // Task 28: feed count for the empty-state decision (Req 6 AC4).
+  const fetchFeedCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/feeds");
+      const data = await res.json().catch(() => ({}));
+      setFeedCount(Array.isArray(data.feeds) ? data.feeds.length : 0);
+    } catch {
+      setFeedCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFeedCount();
+  }, [fetchFeedCount]);
+
+  // Task 28: one-click starter add from the empty state — the same
+  // POST /api/feeds path the sidebar form uses, so feed validation and
+  // duplicate rejection still apply; on success the sidebar list and
+  // the story list both refresh.
+  const addStarterFeed = useCallback(
+    async (feedUrl) => {
+      setAddingStarter(true);
+      setError("");
+      try {
+        const res = await fetch("/api/feeds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: feedUrl }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(data?.error || "Could not add that feed.");
+          return;
+        }
+        setFeedsVersion((v) => v + 1);
+        fetchFeedCount();
+        fetchItems(activeFeed, starredOnly);
+      } catch {
+        setError("Could not reach the server — try again.");
+      } finally {
+        setAddingStarter(false);
+      }
+    },
+    [activeFeed, starredOnly, fetchFeedCount, fetchItems],
+  );
+
+  // Feeds changed (add/remove/import in the sidebar) — refresh the list
+  // and the feed count (task 28) so the empty state appears/disappears
+  // at the right time.
+  const handleFeedsChanged = useCallback(() => {
+    fetchItems(activeFeed, starredOnly);
+    fetchFeedCount();
+  }, [activeFeed, starredOnly, fetchFeedCount, fetchItems]);
 
   // Task 27: manual refresh — POST /api/refresh polls every subscribed
   // feed and stores new items (dedupe at insert); summaries are queued
@@ -187,7 +251,8 @@ const openArticle = useCallback(
       <FeedList
         activeFeed={activeFeed}
         onSelect={(id) => { setActiveFeed(id); setOpenStory(null); }}
-        onFeedsChanged={() => fetchItems(activeFeed, starredOnly)}
+        onFeedsChanged={handleFeedsChanged}
+        refreshSignal={feedsVersion}
       />
       <main className="main">
         {openStory ? (
@@ -201,21 +266,21 @@ const openArticle = useCallback(
         ) : (
           <>
             <h2 style={{ marginTop: 0 }}>{heading}</h2>
-            <p style={{ margin: "0 0 0.75rem" }}>
+            <p className="toolbar">
               <button
                 type="button"
                 onClick={() => setStarredOnly(false)}
                 style={!starredOnly ? { borderColor: "var(--accent)" } : undefined}
               >
                 All stories
-              </button>{" "}
+              </button>
               <button
                 type="button"
                 onClick={() => setStarredOnly(true)}
                 style={starredOnly ? { borderColor: "var(--accent)" } : undefined}
               >
                 ★ Starred only
-              </button>{" "}
+              </button>
               <button type="button" onClick={refreshFeeds} disabled={refreshing}>
                 {refreshing ? "Refreshing…" : "↻ Refresh feeds"}
               </button>
@@ -227,11 +292,14 @@ const openArticle = useCallback(
               <p role="alert" style={{ color: "#ff9d9d" }}>{error}</p>
             )}
             {items === null && <p className="muted">Loading stories…</p>}
-            {items !== null && items.length === 0 && (
+            {items !== null && items.length === 0 && feedCount === 0 && (
+              <EmptyState onAddFeed={addStarterFeed} busy={addingStarter} />
+            )}
+            {items !== null && items.length === 0 && feedCount !== 0 && (
               <p className="muted">
                 {starredOnly
                   ? "No starred stories yet — star one from a card or an article."
-                  : "No stories yet — add a feed on the left (or pick a starter) and your newsroom will fill in."}
+                  : "No stories yet — your feeds may not have fetched any. Try ↻ Refresh feeds, or check the feed list on the left."}
               </p>
             )}
             {items?.map((story) => (

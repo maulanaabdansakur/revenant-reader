@@ -158,10 +158,10 @@ export default function DigestPage() {
         <p>
           <Link href="/">← Back to reader</Link>
         </p>
-        <p>
+        <p className="toolbar">
           <button type="button" onClick={fetchDigest}>
             Refresh digest
-          </button>{" "}
+          </button>
           <button type="button" onClick={refreshFeeds} disabled={refreshingFeeds}>
             {refreshingFeeds ? "Refreshing…" : "↻ Refresh feeds"}
           </button>

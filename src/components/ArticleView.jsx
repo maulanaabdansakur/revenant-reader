@@ -44,7 +44,9 @@ export default function ArticleView({ story, onBack, onToggleStar, onToggleRead,
   }
 
   return (
-    <article className="card rise-in">
+    // Task 28: fade-in on the view transition (opening an article), so
+    // switching from the list to the article feels like one app.
+    <article className="card fade-in">
       <p>
         <button type="button" onClick={onBack}>
           ← Back to list

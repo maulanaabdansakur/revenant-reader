@@ -408,8 +408,45 @@ only when its acceptance criteria pass.
     garbage 400, unknown DELETE 404, /api/digest 200. Pushed to origin
     master directly per user instruction ("Push saja, tidak usah tanya
     lagi").
-- [ ] 28. UI polish: responsive layout, card fade-in animation, empty state
+- [x] 28. UI polish: responsive layout, card fade-in animation, empty state
       with 3 starter feeds (Req 6)
+  - _Done when:_ layout usable at mobile + desktop widths; cards animate
+    in; empty state offers 3 one-click starter feeds.
+  - _Done 2026-11-11:_ new `src/lib/starter-feeds.js` (HN / BBC / Verge,
+    shared by sidebar + main empty state so the two lists cannot drift)
+    + new `src/components/EmptyState.jsx` (inviting panel: "Your
+    newsroom is empty — for now", 3 one-click starter cards with
+    blurbs; adding goes through the normal POST /api/feeds path, so
+    validation + duplicate 409 still apply) + `page.jsx` tracks feed
+    count, shows EmptyState only when 0 feeds, `addStarterFeed`
+    refreshes the sidebar list too (new `refreshSignal` prop on
+    FeedList) + DigestView empty state restyled ("Nothing to rank yet"
+    + back-to-reader link) + ArticleView/DigestView fade-in on view
+    transitions (new `.fade-in` keyframes; cards keep `.rise-in`) +
+    `prefers-reduced-motion` disables both animations + responsive
+    fixes in globals.css (inputs 100%, grid children `min-width: 0`,
+    `overflow-wrap: anywhere` on cards, `.toolbar` wraps, tighter
+    `.main` padding ≤720px, starter grid stacks 1-col on phones; no
+    fixed pixel widths anywhere except the 8px unread dot). Tests: new
+    `test/starter-feeds.test.js` (3 cases) + `test/ui-polish.test.js`
+    (6 CSS guards); `npm test` 69/69 pass, `npm run build` passes.
+    Verified live on a production server (:3101, fresh temp DB,
+    timer disabled): 0 feeds → empty state renders server-side with
+    all 3 starters; all 3 added live via the API on first attempt
+    (201 each, 70 items); duplicate 409, example.com 422, garbage
+    400, unknown DELETE 404, PATCH star 200, /api/digest 200,
+    /digest 200, "Refresh feeds" button present; digest empty state
+    asserted on a second temp render page ("Nothing to rank yet" +
+    link). Temp pages + temp DBs deleted; the task 27 dev server
+    (:3100, real DB) left running untouched, home/digest 200 there.
+    Responsive widths were verified by CSS rule audit + SSR structure
+    (no fixed widths, media query at 720px, min-width:0,
+    overflow-wrap) — NO live browser is available on this VM
+    (no Chromium/Playwright/Firefox), so a pixel-level mobile
+    screenshot check was not possible; that is the one unverified
+    part. Regression: feed CRUD / items / digest / refresh button all
+    pass. Pushed to origin master directly per user instruction
+    ("Push saja, tidak usah tanya lagi").
 - [ ] 29. Deploy live (Vercel first choice; Vultr box fallback) with the
       public URL recorded in the README (Req 7)
 - [ ] 30. Full manual pass: add 3 feeds → summaries appear → filter/rank →

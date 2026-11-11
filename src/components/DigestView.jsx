@@ -8,6 +8,7 @@
 
 "use client";
 
+import Link from "next/link";
 import StoryCard from "@/components/StoryCard";
 
 export default function DigestView({
@@ -22,7 +23,8 @@ export default function DigestView({
   onRetrySummary,
 }) {
   return (
-    <>
+    // Task 28: fade-in on the view transition (reader ↔ digest).
+    <div className="fade-in">
       <h2 style={{ marginTop: 0 }}>Daily digest — top 10</h2>
       {error && (
         <p role="alert" style={{ color: "#ff9d9d" }}>{error}</p>
@@ -31,10 +33,17 @@ export default function DigestView({
       {!loading && stories !== null && (
         <>
           {stories.length === 0 ? (
-            <p className="muted">
-              No stories from the last 24 hours yet — add a feed and your
-              digest will fill in.
-            </p>
+            <section className="empty-state" aria-label="Empty digest">
+              <p className="empty-glyph" aria-hidden="true">☠</p>
+              <h3>Nothing to rank yet</h3>
+              <p className="muted">
+                No stories from the last 24 hours — add a feed and your
+                digest will fill in.
+              </p>
+              <p>
+                <Link href="/">← Back to the reader to add a feed</Link>
+              </p>
+            </section>
           ) : stories.length < limit ? (
             <p className="muted">
               Showing {count} {count === 1 ? "story" : "stories"} from the
@@ -58,6 +67,6 @@ export default function DigestView({
           ))}
         </>
       )}
-    </>
+    </div>
   );
 }
