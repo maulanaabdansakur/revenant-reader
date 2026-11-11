@@ -537,6 +537,24 @@ only when its acceptance criteria pass.
     pass, `npm run build` passes (no app code changed). Pushed to
     origin master directly per user instruction ("Push saja, tidak
     usah tanya lagi").
-- [ ] 33. Final checklist: public repo with `/.kiro/` at root, live demo
+- [x] 33. Final checklist: public repo with `/.kiro/` at root, live demo
       link, video, write-up, category Resurrection
+  - _Done 2026-11-11:_ `docs/final-checklist.md` — full pre-submission
+    check run and documented. ✅ Kiro app (6 files under `/.kiro/`,
+    committed, not gitignored); public repo MIT + README, master in sync
+    at 3cbc0f2 (topics not re-verifiable from this VM — check on GitHub
+    at submit); live demo re-verified today (home/digest 200,
+    /api/digest count 9 ranks 1–9 per-feed 3/3/3, 71 items 62 summarized,
+    timer firing); video re-verified (ffprobe 160.3 s, 1280×720, decode
+    clean); write-up complete, claims spot-checked; requirements 1, 2, 4,
+    5, 7 pass — Req 3 ⚠️ partial (9/71 items at attempts=4, "Summary
+    unavailable" by design, free summarizer 404s ~1/3) and Req 6 ⚠️
+    partial (responsive by CSS audit only, no pixel-level mobile check —
+    no browser on this VM); `npm test` 69/69 pass, `npm run build` passes;
+    secrets scan over all 23 commits clean (`.env.example` values empty,
+    keyless summarizer). **Verdict: submission-ready except user actions:**
+    YouTube upload of the video, Devpost sign-in + submit (task 34),
+    free 4,000 Kiro credits by 2 Dec 03:00 WIB (task 11), optional Vercel
+    deploy. Pushed to origin master directly per user instruction
+    ("Push saja, tidak usah tanya lagi").
 - [ ] 34. Submit on Devpost before 5 Dec 2026 05:00 WIB
