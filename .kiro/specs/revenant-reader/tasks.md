@@ -43,9 +43,21 @@ only when its acceptance criteria pass.
     items, BBC News RSS 31 items, The Verge Atom 10 items; bad URL
     (example.com 404) and invalid URL both return clean errors.
     `npm run build` passes. NOT pushed yet — push after user review.
-- [ ] 14. Feed CRUD API: `POST /api/feeds`, `GET /api/feeds`,
+- [x] 14. Feed CRUD API: `POST /api/feeds`, `GET /api/feeds`,
       `DELETE /api/feeds/[id]` (Req 1)
   - _Done when:_ add/remove/list works end-to-end from the UI.
+  - _Done 2026-11-11:_ `src/app/api/feeds/route.js` (GET list; POST
+    validates via the task 13 parser — non-feed URL rejected 422,
+    invalid URL 400, duplicate URL 409) + `src/app/api/feeds/[id]/
+    route.js` (DELETE, 404 when unknown) + interim in-memory store
+    `src/lib/feeds-store.js` (task 16 replaces it with SQLite) +
+    `FeedList.jsx` wired to the API (add form, per-feed ✕ remove,
+    starter-feed suggestions when empty). Verified live on the dev
+    server: Hacker News RSS + BBC News RSS added (201), duplicate
+    re-add rejected (409), example.com rejected (422), garbage URL
+    rejected (400), list showed both, both deleted (200, unknown id
+    404), list empty again; home page renders 200. `npm run build`
+    passes. NOT pushed — push after user review.
 - [ ] 15. OPML import: parse file, add valid feeds, report added vs.
       skipped (Req 1)
   - _Done when:_ a sample OPML with 5 feeds (1 bad URL) imports 4 and
