@@ -3,7 +3,11 @@
 // Interface (see .kiro/mcp/feed-fetch.md):
 //   fetchFeed(url) -> { title, siteUrl, items: [{ guid, title, link, publishedAt, contentSnippet }] }
 //   normalizeLink(url) -> canonical URL (tracking params stripped, no trailing slash/fragment)
-//   normalizeTitle(title) -> comparison key (trimmed, whitespace collapsed, lowercase)
+//   normalizeTitle(title) -> comparison key (lowercase, punctuation
+//   stripped, whitespace collapsed, trimmed) — design doc, Dedupe
+//   algorithm step 3. Two titles that differ only in case, punctuation
+//   or spacing ("City Unveils New Park!" vs "city unveils new park")
+//   are the same story for title dedupe (task 24).
 //
 // Feed content is untrusted input: callers must escape titles/content before
 // rendering and render links as plain outbound links. This module never sends
@@ -119,7 +123,11 @@ export function normalizeLink(url) {
 
 export function normalizeTitle(title) {
   if (!title || typeof title !== "string") return "";
-  return title.replace(/\s+/g, " ").trim().toLowerCase();
+  return title
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function toPublishedAt(item) {

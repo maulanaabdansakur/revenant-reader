@@ -16,6 +16,11 @@
 // Task 23: items are ALSO deduped by canonicalUrl across feeds at insert
 // time (storeItems) — a story arriving from a second feed collapses onto
 // the surviving row and the extra feed is recorded in item_sources.
+// Task 24 adds title dedupe (design doc step 3): same normalized title
+// from a DIFFERENT feed within 72h collapses the same way. Same-feed
+// same-title items stay separate (Req 4 AC3 — e.g. a feed re-using a
+// title for different articles), as do matches outside the 72h window
+// and undated items (the window cannot be checked without dates).
 // Deleting a feed cascades to its items (FK ON DELETE CASCADE).
 //
 // Persistence: feeds + items live in data/revenant-reader.db (gitignored)
@@ -24,7 +29,7 @@
 
 import { randomUUID } from "node:crypto";
 import { getDb } from "./db.js";
-import { normalizeLink } from "./feed.js";
+import { normalizeLink, normalizeTitle } from "./feed.js";
 
 function rowToFeed(row) {
   if (!row) return null;
@@ -118,10 +123,19 @@ export function addFeed(feed, items = []) {
 //     the item under a new id) → same collapse, no new row.
 //   * Same (feedId, guid) re-fetch → the existing upsert updates
 //     title/content/publishedAt but never resets read/star/summary.
-//   * Empty canonical URL (item has no link) → no URL dedupe is possible;
-//     the (feedId, guid) upsert is the only guard.
-//   * Same title, different URL → NOT a duplicate (Req 4 AC3); title
-//     dedupe is task 24.
+//     The re-fetch check runs FIRST, so a re-fetched item whose URL
+//     changed is never wrongly collapsed onto another feed's row.
+//   * Same normalized title, DIFFERENT feed, published within 72h of
+//     each other (task 24, design doc step 3) → duplicate: no second
+//     row, the new feed is recorded in item_sources, survivor untouched
+//     (Req 4 AC4 — no second summary). The 72h window is the pairwise
+//     difference of the two publishedAt values, so syndication is
+//     caught whenever the feeds are added, not only within 72h of now.
+//   * Same title, different URL, SAME feed → NOT a duplicate (Req 4
+//     AC3): a feed re-using a title for different articles keeps both
+//     cards. Same title outside the 72h window, or either item
+//     undated, also stays separate — the window cannot be verified.
+//   * Empty title → no title dedupe is possible.
 // Returns { inserted, duplicates } so callers (and tests) can see what
 // collapsed. The task 27 refresh will call this directly per feed.
 export function storeItems(feedId, items = []) {
@@ -136,8 +150,20 @@ export function storeItems(feedId, items = []) {
       content = excluded.content,
       publishedAt = excluded.publishedAt
   `);
+  const findByFeedGuid = db.prepare(
+    "SELECT * FROM items WHERE feedId = ? AND guid = ? LIMIT 1",
+  );
   const findByCanonicalUrl = db.prepare(
     "SELECT * FROM items WHERE canonicalUrl = ? AND canonicalUrl != '' LIMIT 1",
+  );
+  // Title-dedupe candidates: dated items whose publishedAt falls within
+  // ±72h of the incoming item's (the pairwise window, checked exactly
+  // in JS below); the normalized-title comparison itself is JS-only.
+  const findTitleCandidates = db.prepare(
+    `SELECT * FROM items
+     WHERE title != '' AND publishedAt IS NOT NULL
+       AND publishedAt >= ? AND publishedAt <= ?
+     ORDER BY rowid ASC`,
   );
   const attachSource = db.prepare(
     "INSERT OR IGNORE INTO item_sources (itemId, feedId) VALUES (?, ?)",
@@ -148,19 +174,54 @@ export function storeItems(feedId, items = []) {
     const guid = item.guid || item.link || item.title || "";
     if (!guid) continue;
     const canonicalUrl = normalizeLink(item.link || "") || "";
+    // Re-fetch of an already-stored item: refresh in place (upsert
+    // below), never dedupe it against another feed's row.
+    if (findByFeedGuid.get(feedId, guid)) {
+      upsertItem.run(
+        randomUUID(),
+        feedId,
+        guid,
+        canonicalUrl,
+        item.title || "",
+        item.contentSnippet || "",
+        item.publishedAt || null,
+      );
+      inserted += 1;
+      continue;
+    }
     if (canonicalUrl) {
       const existing = findByCanonicalUrl.get(canonicalUrl);
       if (existing) {
-        if (existing.feedId === feedId && existing.guid === guid) {
-          // Same item re-fetched: fall through to the upsert below,
-          // which refreshes title/content/publishedAt without
-          // touching read/star/summary state.
-        } else {
-          if (existing.feedId !== feedId) {
-            attachSource.run(existing.id, feedId);
-          }
-          // Either way the story already has its one card: do not
-          // insert a second row, do not touch the survivor (AC4).
+        if (existing.feedId !== feedId) {
+          attachSource.run(existing.id, feedId);
+        }
+        // Either way the story already has its one card: do not
+        // insert a second row, do not touch the survivor (AC4).
+        duplicates += 1;
+        continue;
+      }
+    }
+    // Title dedupe (task 24): same normalized title, different feed,
+    // both dated, published within 72h of each other.
+    const normalizedTitle = normalizeTitle(item.title || "");
+    const publishedAt = item.publishedAt || null;
+    if (normalizedTitle && publishedAt) {
+      const publishedMs = new Date(publishedAt).getTime();
+      if (!Number.isNaN(publishedMs)) {
+        const windowMs = TITLE_DEDUPE_WINDOW_MS;
+        const candidates = findTitleCandidates.all(
+          new Date(publishedMs - windowMs).toISOString(),
+          new Date(publishedMs + windowMs).toISOString(),
+        );
+        const survivor = candidates.find(
+          (row) =>
+            row.feedId !== feedId &&
+            normalizeTitle(row.title) === normalizedTitle,
+        );
+        if (survivor) {
+          attachSource.run(survivor.id, feedId);
+          // Survivor untouched — summary, read/star, publishedAt
+          // stay as-is (AC4), so no second summary is generated.
           duplicates += 1;
           continue;
         }
@@ -179,6 +240,11 @@ export function storeItems(feedId, items = []) {
   }
   return { inserted, duplicates };
 }
+
+// Title-dedupe window (task 24): two stories with the same normalized
+// title collapse only when their publishedAt values are within 72h of
+// each other (design doc, Dedupe algorithm step 3).
+export const TITLE_DEDUPE_WINDOW_MS = 72 * 3600 * 1000;
 
 // Feeds that carried one story: the item's own feed first, then any
 // additional feeds recorded by the task 23 dedupe. Task 24 renders
@@ -266,6 +332,78 @@ export function collapseDuplicateItems() {
     }
   }
   return { groups: groups.length, removed };
+}
+
+// One-time cleanup for rows that duplicated by TITLE before task 24
+// (same design as collapseDuplicateItems above, but for the title rule).
+// Groups rows by normalized title; a later-inserted row merges into the
+// earliest-inserted row only when its feed differs AND the two
+// publishedAt values are within 72h of each other. Same-feed rows and
+// out-of-window rows are never merged (Req 4 AC3 boundary). State merges
+// the same way (read/starred OR, summary inherited when the survivor has
+// none). Returns { groups, removed }.
+export function collapseTitleDuplicates() {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT * FROM items
+       WHERE title != '' AND publishedAt IS NOT NULL
+       ORDER BY rowid ASC`,
+    )
+    .all();
+  const attachSource = db.prepare(
+    "INSERT OR IGNORE INTO item_sources (itemId, feedId) VALUES (?, ?)",
+  );
+  const removedIds = new Set();
+  let groups = 0;
+  let removed = 0;
+  for (let i = 0; i < rows.length; i += 1) {
+    const survivor = rows[i];
+    if (removedIds.has(survivor.id)) continue;
+    const key = normalizeTitle(survivor.title);
+    if (!key) continue;
+    const t = new Date(survivor.publishedAt).getTime();
+    if (Number.isNaN(t)) continue;
+    let absorbed = 0;
+    // Only LATER rows can merge into this survivor, so the
+    // earliest-inserted row always wins (same rule as the URL merge).
+    for (let j = i + 1; j < rows.length; j += 1) {
+      const other = rows[j];
+      if (removedIds.has(other.id)) continue;
+      if (other.feedId === survivor.feedId) continue;
+      if (normalizeTitle(other.title) !== key) continue;
+      const ot = new Date(other.publishedAt).getTime();
+      if (Number.isNaN(ot)) continue;
+      if (Math.abs(ot - t) > TITLE_DEDUPE_WINDOW_MS) continue;
+      db.exec("BEGIN");
+      try {
+        attachSource.run(survivor.id, other.feedId);
+        if (other.read === 1 || other.starred === 1) {
+          db.prepare(
+            `UPDATE items SET read = MAX(read, ?), starred = MAX(starred, ?)
+             WHERE id = ?`,
+          ).run(other.read, other.starred, survivor.id);
+        }
+        if (!survivor.summary && other.summary) {
+          db.prepare(
+            `UPDATE items SET summary = ?, whyItMatters = ?, summaryPending = 0
+             WHERE id = ?`,
+          ).run(other.summary, other.whyItMatters, survivor.id);
+          survivor.summary = other.summary;
+        }
+        db.prepare("DELETE FROM items WHERE id = ?").run(other.id);
+        db.exec("COMMIT");
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
+      removedIds.add(other.id);
+      removed += 1;
+      absorbed += 1;
+    }
+    if (absorbed > 0) groups += 1;
+  }
+  return { groups, removed };
 }
 
 export function removeFeed(id) {

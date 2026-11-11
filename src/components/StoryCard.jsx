@@ -13,10 +13,14 @@
 // "Summary unavailable" and the button disappears, so a retry can never
 // loop. Phase 2, task 19: the star button toggles the persisted starred
 // state and the read button toggles the persisted read state (both via
-// PATCH /api/items/[id], handled by the parent).
+// PATCH /api/items/[id], handled by the parent). Phase 2, task 24:
+// multi-source chips (SourceChips) show every additional feed that
+// carried the story — the old `duplicateSources` text is gone; the API
+// returns `sources[]` (task 23) and the chips render from it.
 
 import { useState } from "react";
 import { formatRelativeTime } from "@/lib/time";
+import SourceChips from "@/components/SourceChips";
 
 export default function StoryCard({ story, onOpen, onToggleStar, onToggleRead, onRetrySummary }) {
   const [retrying, setRetrying] = useState(false);
@@ -51,10 +55,8 @@ export default function StoryCard({ story, onOpen, onToggleStar, onToggleRead, o
       </h3>
       <div className="meta">
         {story.source} · {formatRelativeTime(story.publishedAt)}
-        {story.duplicateSources?.length > 1
-          ? ` · also in: ${story.duplicateSources.slice(1).join(", ")}`
-          : ""}
       </div>
+      <SourceChips sources={story.sources} />
       {hasSummary ? (
         <>
           <p style={{ margin: "0.25rem 0" }}>{story.summary}</p>

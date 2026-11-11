@@ -148,6 +148,32 @@ task 23 (summary + read/star inherited). The `duplicateOf` column on
 items is unused by this step — the survivor/dup relationship lives in
 `item_sources` instead.
 
+**Implemented — task 24 (2026-11-11), title dedupe + chips.** Step 3
+also runs at INSERT time in `storeItems`, after the URL check:
+`normalizeTitle` now strips punctuation too (lowercase, strip
+non-letter/digit, collapse whitespace), so "City Unveils New Park!"
+and "city unveils new park" compare equal. A story collapses onto an
+existing row only when ALL of these hold: the normalized titles
+match, the other row's feed is DIFFERENT, and the two `publishedAt`
+values are within 72h of each other (pairwise difference — so
+syndication is caught whenever the second feed is added, not only
+within 72h of now). The survivor is the earliest-inserted match and
+is left untouched (summary/read/star kept, Req 4 AC4); the new feed
+is recorded in `item_sources`. The boundary, per Req 4 AC3: same
+title + different URL in the SAME feed stays two cards (a feed
+re-using a title for different articles); same title outside the 72h
+window stays two cards; either item undated never title-collapses
+(the window cannot be checked); an empty title never collapses. A
+same-(feedId, guid) re-fetch is upserted BEFORE either dedupe check,
+so a re-fetched item whose URL changed is never wrongly collapsed
+onto another feed's row. `collapseTitleDuplicates()` merges rows
+that duplicated by title before task 24 (same boundary, same state
+merge). Chips: `src/components/SourceChips.jsx` renders the
+additional sources as pills ("Also in" on cards, "Also carried by"
+in the article view) from the API's `sources[]`; a single-source
+story renders nothing. Tests: `test/title-dedupe.test.js` (8 cases);
+`npm test` 38/38 pass.
+
 ## Ranking (digest top-10)
 
 Score = recency weight (decays over 24h) + source-diversity bonus.

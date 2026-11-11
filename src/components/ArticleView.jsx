@@ -12,10 +12,13 @@
 // by the 3-attempt cap); when attempts are exhausted the note becomes
 // "Summary unavailable" and the button disappears, so a retry can never
 // loop. Phase 2, task 19: star + mark read/unread buttons (persisted via
-// PATCH /api/items/[id], handled by the parent).
+// PATCH /api/items/[id], handled by the parent). Phase 2, task 24:
+// multi-source chips (SourceChips) show every additional feed that
+// carried the story.
 
 import { useState } from "react";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/time";
+import SourceChips from "@/components/SourceChips";
 
 export default function ArticleView({ story, onBack, onToggleStar, onToggleRead, onRetrySummary }) {
   const [retrying, setRetrying] = useState(false);
@@ -58,6 +61,7 @@ export default function ArticleView({ story, onBack, onToggleStar, onToggleRead,
         )}{" "}
         · {timeText}
       </div>
+      <SourceChips sources={story.sources} label="Also carried by" />
       {hasSummary ? (
         <>
           <p>{story.summary}</p>

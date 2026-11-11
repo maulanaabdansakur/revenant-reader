@@ -286,9 +286,40 @@ only when its acceptance criteria pass.
     the API returns `sources[]` but no chips render yet — multi-source
     chips are task 24. Pushed to origin master directly per user
     instruction ("Push saja, tidak usah tanya lagi").
-- [ ] 24. Normalized-title dedupe across feeds (72h window) + multi-source
+- [x] 24. Normalized-title dedupe across feeds (72h window) + multi-source
       chips on the surviving card (Req 4)
   - _Done when:_ the same story in 2 feeds shows as 1 card with 2 sources.
+  - _Done 2026-11-11:_ `normalizeTitle` now strips punctuation too
+    (design doc step 3); `storeItems` title-dedupes at insert — same
+    normalized title + different feed + publishedAt within 72h of each
+    other (pairwise) collapses onto the earliest-inserted survivor,
+    new feed recorded in `item_sources`, survivor untouched (Req 4
+    AC4); same-feed same-title, out-of-window, undated, and empty-title
+    items never collapse (Req 4 AC3 boundary, documented in design.md);
+    same-(feedId, guid) re-fetch upserts before either dedupe check;
+    `collapseTitleDuplicates()` merges pre-task-24 title rows the same
+    way. New `src/components/SourceChips.jsx` ("Also in" on cards,
+    "Also carried by" in the article view, `.chip` CSS) renders the
+    extra sources from the API's `sources[]`; the dead
+    `duplicateSources` text in StoryCard is gone. Tests: new
+    `test/title-dedupe.test.js` (8 cases: normalization, cross-feed
+    collapse, 72h window, undated, AC4, empty title, legacy merge +
+    keep-separate); `npm test` 38/38 pass, `npm run build` passes.
+    Verified live on the dev server with a fresh test DB and two local
+    mirror feeds (Mirror A / Mirror B, real Pollinations summaries):
+    feed A added 4 items (incl. a same-feed same-title different
+    article); feed B's 3 same-title stories collapsed — total stayed 5
+    cards, the 3 survivors show sources [Mirror A, Mirror B], the
+    same-feed duplicate and the 5-day-old same-title story each stayed
+    their own card; feed B's batch summarized only the 1 new story
+    (1/1), all 4 pre-existing summaries/attempts unchanged; `?feed=`
+    (B) returned 4 items, no dupes; temp render page asserted the
+    chips ("Also in" ×1, "Also carried by" ×1, Mirror B chip, none on
+    the single-source card) and was deleted. Regression: duplicate
+    409, example.com 422, garbage 400, unknown DELETE 404, PATCH star
+    200, starred filter 1, OPML 0 added / 2 skipped, home 200. Pushed
+    to origin master directly per user instruction ("Push saja, tidak
+    usah tanya lagi").
 
 ## Phase 3 — Digest, polish, deploy (21–27 Nov)
 
