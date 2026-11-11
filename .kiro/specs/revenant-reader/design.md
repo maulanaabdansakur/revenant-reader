@@ -180,6 +180,30 @@ Score = recency weight (decays over 24h) + source-diversity bonus.
 Cap: at most 3 stories from any single feed in the top 10, so one loud feed
 cannot dominate the digest.
 
+**Implemented — task 25 (2026-11-11), `src/lib/ranking.js` (pure, no I/O).**
+Concrete formula: `recency = 1 − ageHours / 24` (linear, clamped to
+[0, 1]; undated items are unrankable and excluded; future-dated items
+clamp to 1). The diversity bonus is applied greedily during selection:
+each pick re-scores the remaining candidates as `recency +
+DIVERSITY_BONUS / (1 + alreadyPickedFromFeed)` (bonus 0.25: first story
+from a feed +0.25, second +0.125, third +0.083), so a slightly older
+story from a fresh feed can outrank a newer story from a feed already
+in the digest, while recency still dominates overall. Once a feed has
+3 stories picked (`MAX_PER_FEED`), its remaining stories are skipped
+(cap counts the item's own feedId; a multi-source story ranks under
+its surviving feed only). The digest covers the last 24h only
+(`DIGEST_WINDOW_MS`); `rankDigest(items, now, opts)` returns the top
+10 (`DIGEST_LIMIT`) in rank order, each with `rankScore` (the effective
+score it was picked with) and 1-based `rank` attached. Ties break by
+publishedAt desc, then id asc. Tests: `test/ranking.test.js` (14
+cases: recency values, ordering, bonus, cap, window, ties, no-mutation);
+`npm test` 52/52 pass. Verified live on the real dev DB (91 items, 4
+feeds, 81 within 24h): top 10 = BBC 3, Hacker News 3, Verge 2, Ars 2 —
+all 4 feeds represented, max 3 per feed, scores non-increasing; Hacker
+News had 24 items within 24h but only 3 made the top 10. The digest
+VIEW is task 26 — this task is the ranking logic only (no `/api/digest`
+route yet).
+
 ## Summarization
 
 - One LLM call per new item, prompt built from title + feed excerpt/content.

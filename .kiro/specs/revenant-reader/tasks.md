@@ -323,8 +323,25 @@ only when its acceptance criteria pass.
 
 ## Phase 3 — Digest, polish, deploy (21–27 Nov)
 
-- [ ] 25. Ranking: recency score + source-diversity cap (max 3 per feed in
+- [x] 25. Ranking: recency score + source-diversity cap (max 3 per feed in
       top 10) (Req 5)
+  - _Done when:_ newer ranks higher; one loud feed cannot dominate the
+    top 10 (at most 3 per feed).
+  - _Done 2026-11-11:_ new `src/lib/ranking.js` (pure, no I/O) —
+    `recencyScore` (linear 1 → 0 over 24h; undated unrankable, future
+    clamps to 1) + `rankDigest` (greedy selection, effective score =
+    recency + 0.25 / (1 + alreadyPickedFromFeed), cap 3 per feed,
+    ties by publishedAt desc then id asc; returns items with
+    `rankScore` + 1-based `rank`). Tests: new `test/ranking.test.js`
+    (14 cases: recency values, ordering, bonus, cap, window, ties,
+    no-mutation); `npm test` 52/52 pass, `npm run build` passes.
+    Verified live on the real dev DB (91 items, 4 feeds): top 10 =
+    BBC 3, Hacker News 3, Verge 2, Ars 2 — all within 24h, scores
+    non-increasing, cap respected (Hacker News had 24 items within
+    24h but only 3 in the top 10). Regression: home 200, /api/items
+    returns items, duplicate feed 409. No `/api/digest` route — the
+    digest view is task 26. Pushed to origin master directly per user
+    instruction ("Push saja, tidak usah tanya lagi").
 - [ ] 26. Digest view: top-10 last-24h, numbered cards, count shown when
       fewer than 10 (Req 5)
 - [ ] 27. Refresh scheduler: poll feeds on a timer + manual refresh button;
