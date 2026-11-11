@@ -481,8 +481,35 @@ only when its acceptance criteria pass.
     `npm test` 69/69 pass, `npm run build` passes. Pushed to origin
     master directly per user instruction ("Push saja, tidak usah
     tanya lagi").
-- [ ] 30. Full manual pass: add 3 feeds → summaries appear → filter/rank →
-      digest top 10 (this is the demo script)
+- [x] 30. Full manual pass: add 3 feeds → summaries appear → filter/rank →
+      digest top 10 (this is the demo script). **Verified live on the
+      public URL (http://167.179.88.69:3000) 2026-11-11:** home 200 (SSR
+      shell + viewport meta, feeds/items load client-side), /digest 200;
+      validation dup 409 / garbage 400 / example.com 422; add xkcd 201
+      (4 items) + OPML import (dups skipped 2 with reasons, Ars added 1,
+      20 items) then DELETE cascade for both — live DB back to exactly
+      3 starter feeds / 71 items; PATCH read + star + filters (starred
+      filter 1 → 0 after restore) + unknown id 404; manual retry on a
+      fresh item → 502 (Pollinations HTTP 404, attempts +1, stays
+      pending — the designed failure path); POST /api/refresh 200
+      (0 inserted, 1 duplicate caught by canonical-URL dedupe, 0
+      errors); /api/digest count 10, ranks 1–10, per-feed cap 3/3/2/2,
+      all within 24h (one fresh Ars story unsummarized → excerpt
+      fallback by design); timer "[refresh] timer started: every 30
+      min" in container logs (no live tick observed in the pass window
+      — container up 9 min < 30 min interval); empty states + responsive
+      verified via prod-bundle strings + task 28 temp-render checks
+      (no live browser on this VM — no pixel-level check possible);
+      article view verified via code + API (open marks read, star/read/
+      retry wired; the click itself not testable without a browser).
+      **Known live quirk (documented, not fixed):** Pollinations
+      returns HTTP 404 on ~1/3 of calls, so 9/71 items sit at
+      attempts=4 (exhausted, "Summary unavailable" fallback by design)
+      and fresh items retry up to the cap. **Demo script written:**
+      `docs/demo-script.md` (8 beats, ~2:35, fits < 3 min). `npm test`
+      69/69 pass, `npm run build` passes. Pushed to origin master
+      directly per user instruction ("Push saja, tidak usah tanya
+      lagi").
 
 ## Phase 4 — Video, write-up, submit (28 Nov–4 Dec)
 
