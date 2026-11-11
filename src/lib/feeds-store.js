@@ -152,17 +152,31 @@ export function listItems(feedId = null) {
 // Same as listItems, but with the feed's title attached as `source`
 // (and its site URL) so the story list can show where each story came
 // from without a second round-trip. Used by GET /api/items (task 17).
-export function listItemsWithSource(feedId = null) {
+// `opts` adds the task 19 filters: starred (true = starred only,
+// false = unstarred only) and read (true/false) — null means no filter.
+export function listItemsWithSource(feedId = null, opts = {}) {
   const db = getDb();
+  const where = [];
+  const values = [];
+  if (feedId) {
+    where.push("items.feedId = ?");
+    values.push(feedId);
+  }
+  if (typeof opts.starred === "boolean") {
+    where.push("items.starred = ?");
+    values.push(opts.starred ? 1 : 0);
+  }
+  if (typeof opts.read === "boolean") {
+    where.push("items.read = ?");
+    values.push(opts.read ? 1 : 0);
+  }
   const query = `
     SELECT items.*, feeds.title AS sourceTitle, feeds.siteUrl AS sourceSiteUrl
     FROM items LEFT JOIN feeds ON feeds.id = items.feedId
-    ${feedId ? "WHERE items.feedId = ?" : ""}
+    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY items.publishedAt IS NULL, items.publishedAt DESC, items.id ASC
   `;
-  const rows = feedId
-    ? db.prepare(query).all(feedId)
-    : db.prepare(query).all();
+  const rows = db.prepare(query).all(...values);
   return rows.map((row) => ({
     ...rowToItem(row),
     // UI shape: `url` is the canonical link (StoryCard/ArticleView read
@@ -179,4 +193,53 @@ export function countItems(feedId = null) {
     ? db.prepare("SELECT COUNT(*) AS n FROM items WHERE feedId = ?").get(feedId)
     : db.prepare("SELECT COUNT(*) AS n FROM items").get();
   return row.n;
+}
+
+// Find one item by id (plain row shape, no source attached).
+export function findItemById(id) {
+  return rowToItem(
+    getDb().prepare("SELECT * FROM items WHERE id = ?").get(id),
+  );
+}
+
+// Same item shape the list endpoint returns (url + source attached).
+export function getItemWithSource(id) {
+  const row = getDb()
+    .prepare(
+      `SELECT items.*, feeds.title AS sourceTitle, feeds.siteUrl AS sourceSiteUrl
+       FROM items LEFT JOIN feeds ON feeds.id = items.feedId
+       WHERE items.id = ?`,
+    )
+    .get(id);
+  if (!row) return null;
+  return {
+    ...rowToItem(row),
+    url: row.canonicalUrl,
+    source: row.sourceTitle || "Unknown feed",
+    siteUrl: row.sourceSiteUrl || "",
+  };
+}
+
+// Persist a read/star change (task 19). `patch` may carry read and/or
+// starred booleans; anything else is ignored. Returns the updated item
+// (list shape) or null when the id is unknown. A patch with neither
+// field is a no-op read of the current state.
+export function updateItem(id, patch) {
+  const db = getDb();
+  const sets = [];
+  const values = [];
+  if (typeof patch?.read === "boolean") {
+    sets.push("read = ?");
+    values.push(patch.read ? 1 : 0);
+  }
+  if (typeof patch?.starred === "boolean") {
+    sets.push("starred = ?");
+    values.push(patch.starred ? 1 : 0);
+  }
+  if (sets.length === 0) return getItemWithSource(id);
+  db.prepare(`UPDATE items SET ${sets.join(", ")} WHERE id = ?`).run(
+    ...values,
+    id,
+  );
+  return getItemWithSource(id);
 }

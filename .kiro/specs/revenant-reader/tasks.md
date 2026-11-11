@@ -130,9 +130,26 @@ only when its acceptance criteria pass.
     page 200, feeds intact (4), per-feed filter still works (31 BBC
     items). `npm run build` passes. Pushed to origin master directly
     per user instruction ("Push saja, tidak usah tanya lagi").
-- [ ] 19. Read/unread + starring, persisted; starred-only filter;
+- [x] 19. Read/unread + starring, persisted; starred-only filter;
       per-feed filter (Req 2)
   - _Done when:_ reload keeps read/star state; filters work.
+  - _Done 2026-11-11:_ `feeds-store.js` gained `updateItem` (PATCH
+    read/starred, returns the updated item) + `getItemWithSource` and
+    starred/read filters on `listItemsWithSource`; new `PATCH
+    /api/items/[id]` (400 on empty/non-boolean body, 404 unknown id)
+    and `GET /api/items` accepts `?starred=1` / `?read=1|0` (per-feed
+    `?feed=` unchanged); `StoryCard`/`ArticleView` star + mark
+    read/unread buttons wired through `page.jsx` `patchItem`
+    (optimistic state merge, open article too); opening a story marks
+    it read (Req 2 AC3); "All stories / ★ Starred only" toggle in the
+    list header. Verified live on the dev server with real feeds (91
+    items): PATCH read/star 200, `?starred=1` returned exactly the
+    starred story, `?read=1` exactly the read one, combined
+    `?feed=&starred=1` worked, error cases 400/404; after a server
+    restart the starred + read states were still there (91 items
+    intact); test marks cleaned back to all-unread/unstarred.
+    `npm run build` passes. Pushed to origin master directly per user
+    instruction ("Push saja, tidak usah tanya lagi").
 
 ### Summaries
 - [ ] 20. Summarizer: one LLM call per new item, prompt from title +

@@ -3,11 +3,13 @@
 // Phase 2, task 17: wired to real /api/items data — newest-first, relative
 // time, unread dot. Summaries arrive in task 20; until then the card shows
 // the feed excerpt with a "Summary pending" note (task 21 fallback).
-// Read/star toggling is task 19 (star button still shows its notice).
+// Phase 2, task 19: the star button toggles the persisted starred state
+// and the read button toggles the persisted read state (both via PATCH
+// /api/items/[id], handled by the parent).
 
 import { formatRelativeTime } from "@/lib/time";
 
-export default function StoryCard({ story, onOpen }) {
+export default function StoryCard({ story, onOpen, onToggleStar, onToggleRead }) {
   const excerpt = story.summary || story.content || "";
   return (
     <article className="card rise-in">
@@ -41,8 +43,11 @@ export default function StoryCard({ story, onOpen }) {
       )}
       <p style={{ margin: "0.5rem 0 0" }}>
         <button type="button" onClick={() => onOpen(story)}>Read</button>{" "}
-        <button type="button" onClick={() => alert("Starring lands in Phase 2 (task 19).")}>
+        <button type="button" onClick={() => onToggleStar?.(story)}>
           {story.starred ? "★ Starred" : "☆ Star"}
+        </button>{" "}
+        <button type="button" onClick={() => onToggleRead?.(story)}>
+          {story.read ? "Mark unread" : "Mark read"}
         </button>
       </p>
     </article>
