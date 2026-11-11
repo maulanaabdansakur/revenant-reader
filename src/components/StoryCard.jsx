@@ -22,7 +22,7 @@ import { useState } from "react";
 import { formatRelativeTime } from "@/lib/time";
 import SourceChips from "@/components/SourceChips";
 
-export default function StoryCard({ story, onOpen, onToggleStar, onToggleRead, onRetrySummary }) {
+export default function StoryCard({ story, onOpen, onToggleStar, onToggleRead, onRetrySummary, rank }) {
   const [retrying, setRetrying] = useState(false);
   const hasSummary = Boolean(story.summary);
   const excerpt = story.content || "";
@@ -42,6 +42,11 @@ export default function StoryCard({ story, onOpen, onToggleStar, onToggleRead, o
   return (
     <article className="card rise-in">
       <h3>
+        {rank != null && (
+          <span className="rank-badge" title={`Ranked #${rank} in the daily digest`}>
+            #{rank}
+          </span>
+        )}
         {story.read ? null : <span className="unread-dot" title="Unread" />}
         <a
           href="#"

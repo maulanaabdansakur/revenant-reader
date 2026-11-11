@@ -100,6 +100,21 @@ input:focus, button:focus { outline: 2px solid var(--accent-dim); outline-offset
   margin-right: 0.4rem;
 }
 
+/* Digest rank badge (task 26): the card's position in the daily top 10. */
+.rank-badge {
+  display: inline-block;
+  min-width: 2rem;
+  text-align: center;
+  background: var(--surface-2);
+  border: 1px solid var(--accent-dim);
+  border-radius: 0.4rem;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.05rem 0.45rem;
+  margin-right: 0.5rem;
+}
+
 .muted { color: var(--muted); }
 
 /* Multi-source chips (task 24): a collapsed story's extra feeds. */

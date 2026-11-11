@@ -342,8 +342,39 @@ only when its acceptance criteria pass.
     returns items, duplicate feed 409. No `/api/digest` route — the
     digest view is task 26. Pushed to origin master directly per user
     instruction ("Push saja, tidak usah tanya lagi").
-- [ ] 26. Digest view: top-10 last-24h, numbered cards, count shown when
+- [x] 26. Digest view: top-10 last-24h, numbered cards, count shown when
       fewer than 10 (Req 5)
+  - _Done when:_ the digest shows the top 10 ranked stories, numbered;
+    fewer than 10 shows the count; opening a story from the digest
+    marks it read.
+  - _Done 2026-11-11:_ `GET /api/digest` (replaces the scaffold stub) +
+    new `src/lib/digest.js` (`getDigest()` — rankDigest over
+    listItemsWithSource, so the route stays a thin wrapper and the
+    logic is unit-testable without the `@/` alias) returns `{ stories,
+    count, limit, windowHours }` + new `src/components/DigestView.jsx`
+    (numbered StoryCards via a new optional `rank` prop / `.rank-badge`
+    CSS; "Showing N stories from the last 24 hours — fewer than 10
+    available." when N < 10, "Top 10 stories…" when full; empty state
+    when none) + `src/app/digest/page.jsx` fully wired (same ArticleView
+    + patchItem/retrySummary callbacks as the reader list; opening a
+    digest story marks it read, Req 5 AC4; "Refresh digest" button).
+    Tests: new `test/digest.test.js` (3 cases: rankDigest order + cap,
+    smaller count, undated/old excluded); `npm test` 55/55 pass,
+    `npm run build` passes. Verified live on the dev server with the
+    real DB (91 items, 4 feeds): `/api/digest` count 10, ranks 1–10,
+    scores non-increasing, order byte-identical to rankDigest computed
+    independently from `/api/items`, per-feed BBC 3 / HN 3 / Verge 2 /
+    Ars 2 (cap respected), all within 24h; PATCH read on the #1 story
+    → digest shows it read, then restored to unread. Fewer-than-10
+    verified on a fresh temp DB with a 3-story local feed: count 3,
+    ranks 1–3; temp render page asserted "Showing 3 stories from the
+    last 24 hours — fewer than 10 available." + badges #1–#3, and on
+    the real DB "Top 10 stories from the last 24 hours." + #10 (page
+    deleted before commit). Regression: duplicate 409, example.com 422,
+    garbage 400, unknown DELETE 404, PATCH star 200 (restored), starred
+    filter 0 after restore, OPML real DB 0 added / 3 skipped, home 200,
+    /digest page 200. Pushed to origin master directly per user
+    instruction ("Push saja, tidak usah tanya lagi").
 - [ ] 27. Refresh scheduler: poll feeds on a timer + manual refresh button;
       runs the on-feed-item hook per new item (Req 3, 4, 5)
 - [ ] 28. UI polish: responsive layout, card fade-in animation, empty state
