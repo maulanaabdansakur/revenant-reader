@@ -51,6 +51,7 @@ function rowToItem(row) {
     summary: row.summary,
     whyItMatters: row.whyItMatters,
     summaryPending: row.summaryPending === 1,
+    summaryAttempts: row.summaryAttempts ?? 0,
     duplicateOf: row.duplicateOf,
   };
 }
@@ -242,4 +243,45 @@ export function updateItem(id, patch) {
     id,
   );
   return getItemWithSource(id);
+}
+
+// --- Summaries (task 20) -------------------------------------------------
+//
+// setItemSummary stores a generated summary + "why it matters" and clears
+// the pending flag. markItemSummaryPending records a failed model attempt
+// (pending = 1, attempts + 1); the on-feed-item hook retries such items
+// on the next refresh, up to 3 attempts, then leaves them pending.
+// listUnsummaryizedItems returns the items of a feed that still need a
+// summary (none cached, attempts left), newest first — the summarizer
+// works through them in that order so the stories the reader sees first
+// get summaries first.
+
+export function setItemSummary(id, { summary, whyItMatters }) {
+  getDb()
+    .prepare(
+      "UPDATE items SET summary = ?, whyItMatters = ?, summaryPending = 0 WHERE id = ?",
+    )
+    .run(summary, whyItMatters, id);
+  return getItemWithSource(id);
+}
+
+export function markItemSummaryPending(id) {
+  getDb()
+    .prepare(
+      "UPDATE items SET summaryPending = 1, summaryAttempts = summaryAttempts + 1 WHERE id = ?",
+    )
+    .run(id);
+  return getItemWithSource(id);
+}
+
+export function listUnsummaryizedItems(feedId, limit = 100) {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM items
+       WHERE feedId = ? AND summary IS NULL AND summaryAttempts < 3
+       ORDER BY publishedAt IS NULL, publishedAt DESC, id ASC
+       LIMIT ?`,
+    )
+    .all(feedId, limit);
+  return rows.map(rowToItem);
 }

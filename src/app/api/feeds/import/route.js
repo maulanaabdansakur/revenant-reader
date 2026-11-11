@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { fetchFeed, normalizeLink } from "@/lib/feed";
 import { parseOpml } from "@/lib/opml";
 import { listFeeds, findByUrl, addFeed } from "@/lib/feeds-store";
+import { summarizeFeedInBackground } from "@/lib/on-feed-item";
 
 const MAX_FILE_BYTES = 1_000_000; // 1 MB — an OPML list is a few KB
 
@@ -104,6 +105,11 @@ export async function POST(request) {
       ),
     );
   }
+
+  // Task 20: summarize each newly added feed's items in the background
+  // (one LLM call per new item, cached; the import response must not
+  // wait ~10s per call — summaries land and appear on the next refresh).
+  for (const feed of added) summarizeFeedInBackground(feed.id);
 
   return Response.json({
     added,

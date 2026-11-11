@@ -152,10 +152,38 @@ only when its acceptance criteria pass.
     instruction ("Push saja, tidak usah tanya lagi").
 
 ### Summaries
-- [ ] 20. Summarizer: one LLM call per new item, prompt from title +
+- [x] 20. Summarizer: one LLM call per new item, prompt from title +
       excerpt, result cached (Req 3)
   - _Done when:_ a new story gets a 2–3 sentence summary + "why it
     matters" within seconds of refresh; re-reading does not re-call.
+  - _Done 2026-11-11:_ provider **Pollinations.ai text API (keyless,
+    no signup, $0, GET `text.pollinations.ai/<prompt>?model=openai`)**
+    — the only reliable keyless free-tier endpoint; verified live 3/3
+    probe calls. `src/lib/summarizer.js` (steering-rules prompt, strict
+    `WHY IT MATTERS:` parse, 2–3-sentence validation with one retry on
+    a short result, call stats + logging) + `src/lib/on-feed-item.js`
+    (hook step 3: background batch, newest-first, concurrency 2, one
+    sequential retry round after 15s — Pollinations 404s bursts) +
+    store `setItemSummary` / `markItemSummaryPending` /
+    `listUnsummaryizedItems` (summary NULL, attempts < 3) +
+    `summaryAttempts` column (safe ALTER migration). Feed-add and
+    OPML-import routes fire the batch without awaiting (POST must not
+    wait ~10–30s per call). Verified live on the dev server with fresh
+    test DBs: 2-item local feed → both summarized in ~2s (3 sentences
+    + why line each); real Verge Atom (10 items) → 4/10 first pass,
+    6/10 404 rate-limit, all 6 recovered by the retry round (12/12
+    summarized, 0 pending); re-reads + a server restart → 0 new model
+    calls (cached summaries reused); dead endpoint
+    (`SUMMARIZER_BASE_URL=http://127.0.0.1:1`) → summary null,
+    summaryPending=1, attempts=2, excerpt still shown (task 21
+    fallback); duplicate 409 / example.com 422 unchanged. Parser unit
+    tests 6/6 (incl. "9 p.m." not splitting sentences). `npm run
+    build` passes. No key needed — `SUMMARIZER_API_KEY` stays reserved
+    in `.env.example` for a future provider swap. Caveat: serverless
+    (Vercel) may kill background work after the response — task 27
+    refresh / task 29 deploy to confirm `waitUntil` or a cron refresh.
+    Pushed to origin master directly per user instruction ("Push saja,
+    tidak usah tanya lagi").
 - [ ] 21. Summary fallback: model unavailable → feed excerpt shown,
       story marked "summary pending" (Req 3)
 - [ ] 22. Enforce steering rules in the prompt + a length check on the

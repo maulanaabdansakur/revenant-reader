@@ -52,6 +52,7 @@ export function getDb() {
       summary        TEXT,
       whyItMatters   TEXT,
       summaryPending INTEGER NOT NULL DEFAULT 0,
+      summaryAttempts INTEGER NOT NULL DEFAULT 0,
       duplicateOf    TEXT,
       UNIQUE (feedId, guid)
     );
@@ -59,6 +60,18 @@ export function getDb() {
     CREATE INDEX IF NOT EXISTS items_canonicalUrl_idx ON items(canonicalUrl);
     CREATE INDEX IF NOT EXISTS items_publishedAt_idx ON items(publishedAt);
   `);
+  // Task 20: track how many summary attempts an item has had so the
+  // on-feed-item hook can retry on refresh (max 3 attempts, then leave
+  // it pending). Added as a migration so existing DBs pick it up:
+  // ALTER fails when the column already exists — that is the expected
+  // steady state, so the error is swallowed.
+  try {
+    db.exec(
+      "ALTER TABLE items ADD COLUMN summaryAttempts INTEGER NOT NULL DEFAULT 0",
+    );
+  } catch {
+    // Column already exists.
+  }
   return db;
 }
 

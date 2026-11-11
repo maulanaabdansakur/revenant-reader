@@ -144,6 +144,23 @@ cannot dominate the digest.
 - Result cached in the `summary` / `whyItMatters` columns; never re-run.
 - On model failure: `summaryPending = true`, show feed excerpt instead.
 
+**Provider (task 20, decided 2026-11-11): Pollinations.ai text API —
+keyless, no signup, $0.** `GET https://text.pollinations.ai/<url-encoded
+prompt>?model=openai` (model `openai`, `&private=true`). No API key is
+used; `SUMMARIZER_API_KEY` in `.env.example` is reserved for a future
+provider swap. Overridable via `SUMMARIZER_BASE_URL` /
+`SUMMARIZER_MODEL` / `SUMMARIZER_TIMEOUT_MS` (60s) /
+`SUMMARIZER_CONCURRENCY` (2). Verified live: ~2–30s per call, output
+follows the strict `WHY IT MATTERS:` format; a burst of 10 concurrent
+calls 404s ~60% (rate limit) — the batch therefore runs at concurrency
+2 with one sequential retry round after 15s, which recovered 6/6 failed
+items in testing. A summary shorter than 2 sentences is retried once
+with a firmer prompt (max 2 calls per item). Summarization runs in the
+background after feed add / OPML import (the POST never waits); on
+serverless the background work may be cut off after the response —
+task 27 (refresh scheduler) / task 29 (deploy) must confirm `waitUntil`
+or a cron-driven refresh so summaries still land on Vercel.
+
 ## Theming
 
 Dark theme via CSS variables (`src/app/globals.css`):
@@ -182,5 +199,7 @@ Dark theme via CSS variables (`src/app/globals.css`):
   SQLite locally, Postgres on deploy (see "Persistence" above).
 - Which free-tier LLM endpoint to use for summaries (decide by cost = $0
   and reliability; API key, if any, via environment variable — never committed).
+  **Decided in task 20 (2026-11-11): Pollinations.ai text API, keyless,
+  $0 — see "Summarization" above.**
 - Vercel vs. Vultr-box deploy (Vercel first choice; Vultr is the proven
   fallback from VeriBrief).

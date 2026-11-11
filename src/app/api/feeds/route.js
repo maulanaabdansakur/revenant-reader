@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { fetchFeed, normalizeLink } from "@/lib/feed";
 import { listFeeds, findByUrl, addFeed } from "@/lib/feeds-store";
+import { summarizeFeedInBackground } from "@/lib/on-feed-item";
 
 export async function GET() {
   return Response.json({ feeds: listFeeds() });
@@ -63,5 +64,9 @@ export async function POST(request) {
     },
     parsed.items,
   );
+  // Task 20: summarize the new items in the background (one LLM call per
+  // new item, cached; ~10s per call, so the POST must not wait for it).
+  // Summaries land within ~a minute and appear on the next refresh.
+  summarizeFeedInBackground(feed.id);
   return Response.json({ feed }, { status: 201 });
 }
