@@ -20,14 +20,22 @@
 // only pass items with no cached summary (see listUnsummaryizedItems).
 // On any failure the caller marks the item summaryPending instead of
 // retrying inline (hook: retry on next refresh, max 3 attempts).
-// One exception: a summary shorter than 2 sentences is retried once
-// with a firmer prompt (the model sometimes over-compresses); the retry
-// result is then accepted as-is, so an item costs 1 call normally,
-// 2 at most.
+// One exception: a summary that breaks a steering rule is retried once
+// with the violations named in a firmer prompt; if the retry still
+// breaks a rule, the call THROWS (no rule-breaking summary is ever
+// stored) — the item stays summaryPending and the excerpt is shown
+// (task 21 fallback). So an item costs 1 call normally, 2 at most.
 //
 // GET (not POST) is used deliberately: it is all Pollinations needs, and
 // it keeps the call working from sandboxed environments that block POST
 // bodies.
+//
+// Enforcement (task 22): the prompt alone is not enforcement. Every
+// parsed result is checked by validateSummary() in
+// src/lib/summary-rules.js (length, clickbait, hooks, markdown,
+// invented numbers/quotes); see summarizeItem() below.
+
+import { splitSentences, validateSummary } from "./summary-rules.js";
 
 const BASE_URL =
   process.env.SUMMARIZER_BASE_URL || "https://text.pollinations.ai";
@@ -51,7 +59,7 @@ export function getSummarizerStats() {
 // parsed without a second call:
 //   <2-3 sentences of plain summary>
 //   WHY IT MATTERS: <one line>
-export function buildSummaryPrompt(title, excerpt, firm = false) {
+export function buildSummaryPrompt(title, excerpt, firm = false, violations = []) {
   const safeTitle = (title || "").trim().slice(0, 200);
   const safeExcerpt = (excerpt || "").trim().slice(0, 600);
   return [
@@ -62,6 +70,12 @@ export function buildSummaryPrompt(title, excerpt, firm = false) {
       ? [
           "IMPORTANT: write two or three sentences, not one — do not",
           "compress the story into a single sentence.",
+        ]
+      : []),
+    ...(violations.length > 0
+      ? [
+          "Your previous summary broke these steering rules — fix all of",
+          `them this time: ${violations.join("; ")}.`,
         ]
       : []),
     "Use only facts from the story — never invent facts, numbers, quotes",
@@ -85,35 +99,11 @@ function stripMarkdown(text) {
     .trim();
 }
 
-function splitSentences(text) {
-  // Mask abbreviations with same-length placeholders so "9 p.m." or
-  // "the U.S. economy" does not split mid-sentence; slice the original
-  // text by the masked match indices so the output keeps its dots.
-  const masked = text.replace(
-    /\b([ap]\.m\.|U\.S\.|Mr\.|Mrs\.|Ms\.|Dr\.|e\.g\.|i\.e\.)/gi,
-    (m) => m.replace(/\./g, ""),
-  );
-  const re = /[^.!?]+[.!?]+["')\]]*\s*/g;
-  const out = [];
-  let m;
-  let end = 0;
-  while ((m = re.exec(masked)) !== null) {
-    const piece = text.slice(m.index, m.index + m[0].length).trim();
-    if (piece) out.push(piece);
-    end = m.index + m[0].length;
-  }
-  // Trailing fragment without a terminator (e.g. a cut-off line).
-  const tail = text.slice(end).trim();
-  if (tail) out.push(tail);
-  if (out.length === 0) return text.trim() ? [text.trim()] : [];
-  return out;
-}
-
 // Parse the strict two-part format. Throws when the model did not follow
 // it (caller treats that as a failed call -> summaryPending). A summary
 // longer than 3 sentences is truncated at the sentence boundary — the
-// steering rule is 2-3 sentences, no more (task 22 formalizes this
-// check; this keeps over-long output off the card meanwhile).
+// steering rule is 2-3 sentences, no more. The remaining rules are
+// enforced by validateSummary() in the caller (summarizeItem), not here.
 export function parseSummaryResponse(text) {
   if (!text || typeof text !== "string") {
     throw new Error("Summarizer returned an empty response.");
@@ -141,30 +131,34 @@ export function parseSummaryResponse(text) {
 }
 
 // One model call for one item. Returns { summary, whyItMatters }.
-// Throws on network error, non-200, timeout, or unparseable output.
+// Throws on network error, non-200, timeout, unparseable output, or a
+// summary that still breaks a steering rule after the one retry.
 //
-// One retry: the model sometimes compresses a story into a single
-// sentence despite the prompt. A 1-sentence summary breaks the steering
-// rule (2-3 sentences), so a short result is retried once with a firmer
-// prompt. If the retry also comes back short, its result is accepted
-// anyway (a short summary beats none); if the retry fails outright, the
-// first result is kept. So an item costs 1 call normally, 2 at most —
-// the cached result is still never re-called (see on-feed-item.js).
+// Enforcement (task 22): the first result is validated against the
+// steering rules (validateSummary). If it breaks a rule, it is retried
+// once with a firmer prompt that NAMES the violations, so the model can
+// fix exactly what was wrong. If the retry still breaks a rule — or the
+// retry call itself fails — the error is thrown and NO summary is
+// stored: the caller marks the story summaryPending and the excerpt is
+// shown (task 21 fallback). A rule-breaking summary is never stored,
+// even if that means the story waits for the next refresh. An item
+// costs 1 call normally, 2 at most — the cached result is still never
+// re-called (see on-feed-item.js).
 export async function summarizeItem({ title, content }) {
   const first = await callModel(buildSummaryPrompt(title, content));
-  if (first.sentenceCount >= 2) return finish(first);
+  const firstCheck = validateSummary(first, { title, content });
+  if (firstCheck.ok) return finish(first);
   console.log(
-    `[summarizer] short summary (${first.sentenceCount} sentence) — one retry with firmer prompt`,
+    `[summarizer] first summary broke steering rules (${firstCheck.violations.join("; ")}) — one retry with the violations named`,
   );
-  try {
-    const second = await callModel(buildSummaryPrompt(title, content, true));
-    return finish(second);
-  } catch (err) {
-    console.log(
-      `[summarizer] retry failed, keeping first result: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return finish(first);
-  }
+  const second = await callModel(
+    buildSummaryPrompt(title, content, true, firstCheck.violations),
+  );
+  const secondCheck = validateSummary(second, { title, content });
+  if (secondCheck.ok) return finish(second);
+  throw new Error(
+    `Summary broke steering rules: ${secondCheck.violations.join("; ")}`,
+  );
 }
 
 function finish(parsed) {

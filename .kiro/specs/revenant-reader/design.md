@@ -144,6 +144,23 @@ cannot dominate the digest.
 - Result cached in the `summary` / `whyItMatters` columns; never re-run.
 - On model failure: `summaryPending = true`, show feed excerpt instead.
 
+**Enforcement (task 22, 2026-11-11):** the prompt is not enforcement —
+`src/lib/summary-rules.js` (`validateSummary`) checks every parsed
+result mechanically: 2–3 sentences, one-line non-empty "why it matters",
+banned clickbait words (with the steering doc's "breaking"-wire
+exception), no question hooks, no direct reader address, plain text
+only (no markdown), and every number / quoted phrase must appear in
+the source (the checkable part of "never invent facts"). A result that
+breaks a rule is retried once with a firmer prompt that NAMES the
+violations; if the retry still breaks a rule, the call throws and NO
+summary is stored — the story stays `summaryPending` and the excerpt is
+shown. Rules no machine can check (stating a cause, labelling opinion
+pieces, headline-claim matching) stay prompt-only and are listed as
+`NOT_CHECKABLE` in the module. Tests: `test/summary-rules.test.js`
+(validation units + parser) and `test/summarizer-enforcement.test.js`
+(stub-server end-to-end), run with `npm test` (Node built-in runner,
+zero new dependencies).
+
 **Provider (task 20, decided 2026-11-11): Pollinations.ai text API —
 keyless, no signup, $0.** `GET https://text.pollinations.ai/<url-encoded
 prompt>?model=openai` (model `openai`, `&private=true`). No API key is

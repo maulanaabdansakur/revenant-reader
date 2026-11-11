@@ -215,8 +215,41 @@ only when its acceptance criteria pass.
     dup + bad URL) → added 1, skipped 2. `npm run build` passes.
     Pushed to origin master directly per user instruction ("Push saja,
     tidak usah tanya lagi").
-- [ ] 22. Enforce steering rules in the prompt + a length check on the
+- [x] 22. Enforce steering rules in the prompt + a length check on the
       output (Req 3, steering)
+  - _Done when:_ summaries obey `.kiro/steering/summaries.md`; a
+    rule-breaking model output is corrected/rejected, not stored as-is.
+  - _Done 2026-11-11:_ new `src/lib/summary-rules.js` — pure
+    `validateSummary()` checks every mechanically-checkable rule
+    (2–3 sentences; one-line non-empty "why it matters"; banned
+    clickbait words with the "breaking"-wire exception; no question
+    hooks; no direct reader address; plain text, no markdown; every
+    number/quoted phrase must appear in the source) + `splitSentences`
+    moved here (shared with the parser) + `NOT_CHECKABLE` lists the
+    three rules no machine can check (cause claims, opinion labelling,
+    headline-claim matching — prompt-only). `summarizer.js` now
+    validates each result and retries once with a firmer prompt that
+    NAMES the violations; a retry that still breaks a rule throws, so
+    no rule-breaking summary is ever stored (item stays
+    summaryPending, excerpt shown — task 21 fallback). This replaces
+    task 20's "short summary beats none" acceptance. Tests:
+    `test/summary-rules.test.js` (15 validation + parser cases) +
+    `test/summarizer-enforcement.test.js` (stub-server end-to-end:
+    good = 1 call, violating-then-good = 2 calls with the violation
+    named in the retry prompt, violating-twice = refused, violating
+    + failed retry = throws); `npm test` 19/19 pass, `npm run build`
+    passes. Verified live on the dev server: real Verge Atom (10
+    items, real Pollinations endpoint) → 10/10 summaries stored, 0
+    rule-breaking by the validator, 10 model calls, 0 violation
+    retries; re-lists → 0 new calls. Enforcement trigger via a stub
+    model server (bad mode: 1-sentence + "shocking"): feed-add batch
+    → 0 summaries stored, all 10 pending, attempts=2, 40 stub calls,
+    40 "broke steering rules" log lines; stub flipped to good →
+    manual retry returned 200 with a valid summary (1 call, 41
+    total), re-lists → 0 new calls. Regression: duplicate 409,
+    example.com 422, garbage 400, unknown DELETE 404, PATCH star 200,
+    OPML 0 added / 2 skipped (dup + bad). Pushed to origin master
+    directly per user instruction ("Push saja, tidak usah tanya lagi").
 
 ### Dedupe
 - [ ] 23. Link normalization + canonical-URL dedupe (Req 4)
