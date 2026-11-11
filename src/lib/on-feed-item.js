@@ -25,6 +25,8 @@
 // here: until then every new item is summarized once.
 
 import {
+  findItemById,
+  getItemWithSource,
   listUnsummaryizedItems,
   setItemSummary,
   markItemSummaryPending,
@@ -93,9 +95,44 @@ export async function runSummariesForFeed(feedId) {
   return { attempted, succeeded, failed: failed.length };
 }
 
-// Fire-and-forget wrapper for API routes: starts the batch and logs an
-// unexpected top-level error instead of crashing the request. The route
-// itself has already returned by the time summaries land.
+// --- Task 21: single manual retry path ------------------------------------
+//
+// retryItemSummary(id) makes exactly ONE model attempt for one story and
+// returns { status, item, error? }:
+//   "ok"                — summary stored, pending flag cleared.
+//   "failed"            — the one attempt failed; pending flag + attempts
+//                         recorded (markItemSummaryPending), so the UI can
+//                         show the excerpt + "Summary pending" again.
+//   "already-summarized"— a summary exists (e.g. the background batch got
+//                         there first); no model call is made.
+//   "exhausted"         — summaryAttempts >= 3; no further attempts, so a
+//                         retry can never loop forever.
+//   "not-found"         — unknown id.
+// The route POST /api/items/[id]/summarize maps these to 200/502/409/404.
+// There is no automatic re-queue here: the next attempt comes only from
+// an explicit user retry (this function) or the next refresh (task 27).
+
+const MAX_SUMMARY_ATTEMPTS = 3;
+
+export async function retryItemSummary(id) {
+  const item = findItemById(id);
+  if (!item) return { status: "not-found", item: null };
+  if (item.summary) return { status: "already-summarized", item: getItemWithSource(id) };
+  if ((item.summaryAttempts ?? 0) >= MAX_SUMMARY_ATTEMPTS) {
+    return { status: "exhausted", item: getItemWithSource(id) };
+  }
+  try {
+    const { summary, whyItMatters } = await summarizeItem({
+      title: item.title,
+      content: item.content,
+    });
+    return { status: "ok", item: setItemSummary(id, { summary, whyItMatters }) };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(`[on-feed-item] manual summary retry failed for item ${id}: ${message}`);
+    return { status: "failed", item: markItemSummaryPending(id), error: message };
+  }
+}
 export function summarizeFeedInBackground(feedId) {
   runSummariesForFeed(feedId).catch((err) => {
     console.log(

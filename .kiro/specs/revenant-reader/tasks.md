@@ -184,8 +184,37 @@ only when its acceptance criteria pass.
     refresh / task 29 deploy to confirm `waitUntil` or a cron refresh.
     Pushed to origin master directly per user instruction ("Push saja,
     tidak usah tanya lagi").
-- [ ] 21. Summary fallback: model unavailable → feed excerpt shown,
+- [x] 21. Summary fallback: model unavailable → feed excerpt shown,
       story marked "summary pending" (Req 3)
+  - _Done when:_ excerpt + "Summary pending" render in list and article
+    view; a single retry path works once and does not loop.
+  - _Done 2026-11-11:_ `POST /api/items/[id]/summarize` (new route) +
+    `retryItemSummary` in `src/lib/on-feed-item.js` — exactly ONE model
+    attempt per call; 200 on success, 502 on a failed attempt (attempts
+    + 1), 409 when already summarized or attempts exhausted (>= 3), 404
+    unknown id. `StoryCard`/`ArticleView` now show the excerpt cleanly
+    with a "Summary pending" note + "Retry summary" button ONLY when
+    the model actually failed (`summaryPending`); a fresh story whose
+    batch is still running shows just the excerpt; attempts-exhausted
+    stories show "Summary unavailable" with no button; empty excerpts
+    show "No excerpt available from this feed." instead of a blank
+    block. `page.jsx` wires `retrySummary` (POST + merge into list and
+    open article). Verified live on the dev server with a fresh test DB
+    and a dead summarizer endpoint (`SUMMARIZER_BASE_URL=http://
+    127.0.0.1:1`): real Hacker News RSS (30 items, served locally
+    verbatim because the egress proxy took ~15s vs the 10s fetch
+    timeout) → all 30 pending, attempts=2, 0 summaries; temp render
+    page asserted list + article: excerpt, "Summary pending", "Retry
+    summary" ×4 (pending + empty-excerpt copies), "Summary unavailable"
+    ×2, no "Why it matters"; retry on dead endpoint → 502 then 409
+    exhausted; restarted with the real Pollinations endpoint → retry
+    returned a real 2-sentence summary + why line (200, pending
+    cleared), second retry → 409 already-summarized, 2 re-lists → still
+    exactly 1 model call. Regression: duplicate 409, example.com 422,
+    garbage 400, unknown DELETE 404, PATCH star 200; OPML (BBC + HN
+    dup + bad URL) → added 1, skipped 2. `npm run build` passes.
+    Pushed to origin master directly per user instruction ("Push saja,
+    tidak usah tanya lagi").
 - [ ] 22. Enforce steering rules in the prompt + a length check on the
       output (Req 3, steering)
 

@@ -8,6 +8,8 @@
 // Phase 2, task 19: opening a story marks it read (persisted in SQLite
 // via PATCH /api/items/[id]); star and read/unread toggles persist too;
 // "Starred only" filter (?starred=1) and the per-feed filter both work.
+// Phase 2, task 21: one manual summary retry per story (POST
+// /api/items/[id]/summarize), wired into StoryCard and ArticleView.
 
 "use client";
 
@@ -74,7 +76,38 @@ export default function Home() {
     }
   }, []);
 
-  const openArticle = useCallback(
+  // Phase 2, task 21: one manual summary retry per story — POST
+// /api/items/[id]/summarize (a single model attempt, bounded by the
+// 3-attempt cap). The updated item (summary stored, or one more failed
+// attempt) is merged into the list and the open article; a failed retry
+// shows the server's message instead of failing silently.
+const retrySummary = useCallback(async (story) => {
+  try {
+    const res = await fetch(
+      `/api/items/${encodeURIComponent(story.id)}/summarize`,
+      { method: "POST" },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (data.item) {
+      const updated = data.item;
+      setItems((prev) =>
+        prev === null
+          ? prev
+          : prev.map((it) => (it.id === story.id ? { ...it, ...updated } : it)),
+      );
+      setOpenStory((prev) =>
+        prev && prev.id === story.id ? { ...prev, ...updated } : prev,
+      );
+    }
+    if (!res.ok) {
+      setError(data?.error || "Summary retry failed — try again later.");
+    }
+  } catch {
+    setError("Could not reach the server — try again.");
+  }
+}, []);
+
+const openArticle = useCallback(
     (story) => {
       listScrollYRef.current = window.scrollY;
       setOpenStory(story);
@@ -124,6 +157,7 @@ export default function Home() {
             onBack={() => setOpenStory(null)}
             onToggleStar={toggleStar}
             onToggleRead={toggleRead}
+            onRetrySummary={retrySummary}
           />
         ) : (
           <>
@@ -162,6 +196,7 @@ export default function Home() {
                 onOpen={openArticle}
                 onToggleStar={toggleStar}
                 onToggleRead={toggleRead}
+                onRetrySummary={retrySummary}
               />
             ))}
           </>
